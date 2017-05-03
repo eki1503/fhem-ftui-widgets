@@ -9,7 +9,5 @@ See:
 for details on FTUI.
 
 See:
-
 [Link to Chart Widget Wiki](https://www.google.de/url?sa=t&rct=j&q=&esrc=s&source=web&cd=2&cad=rja&uact=8&ved=0ahUKEwiZ3PDUqdPTAhVLaxQKHdj1BKgQFggoMAE&url=https%3A%2F%2Fwiki.fhem.de%2Fwiki%2FFTUI_Widget_Chart&usg=AFQjCNHz2utN-sko8Mh0hIuwcvEAkAtiQA)
-
 for details about the using and features of the chart widget.
