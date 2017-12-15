@@ -1,0 +1,45 @@
+.scrolllabel:not(.numeric_speed) {
+    -webkit-transition: top 1200ms ease, left 2000ms linear;
+    -moz-transition: top 1200ms ease, left 2000ms linear;
+    transition: top 1200ms ease, left 2000ms linear;	
+}
+.scrolllabel.fast {
+    -webkit-transition: top 800ms ease, left 1000ms linear;
+    -moz-transition: top 800ms ease, left 1000ms linear;
+    transition: top 800ms ease, left 1000ms linear;	
+}
+.scrolllabel.slow {
+    -webkit-transition: top 2000ms ease, left 4000ms linear;
+    -moz-transition: top 2000ms ease, left 4000ms linear;
+    transition: top 2000ms ease, left 4000ms linear;	
+}
+.ease > div > .scrolllabel:not(.numeric_speed) {
+    -webkit-transition: top 1200ms ease, left 1200ms ease;
+    -moz-transition: top 1200ms ease, left 1200ms ease;
+    transition: top 1200ms ease, left 1200ms ease;	
+}
+.ease.scrolllabel.fast {
+    -webkit-transition: top 800ms ease, left top 800ms ease;
+    -moz-transition: top 800ms ease, left top 800ms ease;
+    transition: top 800ms ease, left top 800ms ease;	
+}
+.ease.scrolllabel.slow {
+    -webkit-transition: top 2000ms ease, left 2000ms ease;
+    -moz-transition: top 2000ms ease, left 2000ms ease;
+    transition: top 2000ms ease, left 2000ms ease;	
+}
+.linear > div > .scrolllabel:not(.numeric_speed) {
+    -webkit-transition: top 2000ms linear, left 2000ms linear;
+    -moz-transition: top 2000ms linear, left 2000ms linear;
+    transition: top 2000ms linear, left 2000ms linear;	
+}
+.linear.scrolllabel.fast {
+    -webkit-transition: top 1000ms linear, left 1000ms linear;
+    -moz-transition: top 1000ms linear, left 1000ms linear;
+    transition: top 1000ms linear, left 1000ms linear;	
+}
+.linear.scrolllabel.slow {
+    -webkit-transition: top 4000ms linear, left 4000ms linear;
+    -moz-transition: top 4000ms linear, left 4000ms linear;
+    transition: top 4000ms linear, left 4000ms linear;	
+}
