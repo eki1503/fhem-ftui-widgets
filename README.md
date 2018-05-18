@@ -30,7 +30,8 @@ for details of capabilities and usage.
 <h2>Scrollabel Widget:</h2>
 
 Widget for scrolled text in vertical and horizontal direction
-![](https://github.com/eki1503/fhem-ftui-widgets/blob/master/www/images/2018-05-18_11h22_25.mp4)
+
+![](https://github.com/eki1503/fhem-ftui-widgets/blob/master/www/images/ezgif.com-video-to-gif.gif)
 
 See:
 [Link to Forum Discussion](https://forum.fhem.de/index.php/topic,73497.msg651559.html#msg651559)
@@ -39,4 +40,7 @@ See:
 
 Extension for existing Widget to show FHEM Weekday Timer
 
+![](https://github.com/eki1503/fhem-ftui-widgets/blob/master/www/images/2018-05-18_11h51_23.png)
+
+See:
 [Link to Forum Discussion](https://forum.fhem.de/index.php/topic,48106.msg397622.html#msg397622)
