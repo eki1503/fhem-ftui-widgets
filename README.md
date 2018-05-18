@@ -30,6 +30,7 @@ for details of capabilities and usage.
 <h2>Scrollabel Widget:</h2>
 
 Widget for scrolled text in vertical and horizontal direction
+![](https://github.com/eki1503/fhem-ftui-widgets/blob/master/www/images/2018-05-18_11h22_25.mp4)
 
 See:
 [Link to Forum Discussion](https://forum.fhem.de/index.php/topic,73497.msg651559.html#msg651559)
