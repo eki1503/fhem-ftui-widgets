@@ -21,7 +21,7 @@ for details about the using and features of the chart widget.
 
 Widget for showing maps and mapping of any kind of information from FHEM onto a map
 
-![](https://forum.fhem.de/index.php?action=dlattach;topic=78379.0;attach=87344;image).
+![](https://github.com/eki1503/fhem-ftui-widgets/blob/master/www/images/2017-10-23_16h51_38.png).
 
 See:
 [Link to Forum Discussion](https://forum.fhem.de/index.php/topic,78379.msg703359.html#msg703359)
