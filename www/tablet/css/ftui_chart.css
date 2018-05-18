@@ -61,7 +61,7 @@
 .caption {
 	font-size: 11px;
 	font-weight: bold;
-	fill-opacity: 0;
+	fill-opacity: 1;
 }
 /* Definition for pulldown menus */
 .pulldownmenu {
