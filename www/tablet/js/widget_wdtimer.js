@@ -24,6 +24,20 @@ Datetimepicker:  https://github.com/xdan/datetimepicker   [in fhem-tablet-ui ent
 Switchery: https://github.com/abpetkov/switchery   [in fhem-tablet-ui enthalten]
 ----------------------------------------------------------------------------
 
+----------------------------------------------------------------------------
+Version 2.0
+
+Erweiterung zur Unterstützung von Sunset/Sunrise, $WE, Perl code, ...
+
+Kurt Eckert 2018
+Verwendet:
+JQuery: https://jquery.com/  [in fhem enthalten]
+JQuery-UI: https://jqueryui.com/  [in fhem enthalten]
+Datetimepicker:  https://github.com/xdan/datetimepicker   [in fhem-tablet-ui enthalten]
+Switchery: https://github.com/abpetkov/switchery   [in fhem-tablet-ui enthalten]
+----------------------------------------------------------------------------
+
+
 ATTRIBUTE:
 ~~~~~~~~~~
     Attribute (Pflicht):
@@ -93,6 +107,8 @@ function depends_wdtimer (){
     var deps = [];
 
 	var userCSS = $('head').find("[href$='fhem-tablet-ui-user.css']");
+	var topCSS = $('head').find("[href$='fhem-tablet-ui.css']");
+
 	if (userCSS.length)
 		userCSS.before('<link rel="stylesheet" href="'+ ftui.config.basedir + 'css/fhem-tablet-ui-wdtimer.css" type="text/css" />');
 	else
@@ -104,11 +120,11 @@ function depends_wdtimer (){
 		else
 			$('head').append('<link rel="stylesheet" href="'+ ftui.config.basedir + 'lib/jquery.datetimepicker.css" type="text/css" />');   
 
-        deps.push("lib/jquery.datetimepicker.js");
+        deps.push(ftui.config.basedir + "lib/jquery.datetimepicker.js");
     }
     if ($('head').find("[href$='codemirror.css']").length == 0){
-		if (userCSS.length)
-			userCSS.before('<link rel="stylesheet" href="'+ ftui.config.basedir + '../codemirror/codemirror.css" type="text/css" />');   
+		if (topCSS.length)
+			topCSS.before('<link rel="stylesheet" href="'+ ftui.config.basedir + '../codemirror/codemirror.css" type="text/css" />');   
 		else
 			$('head').append('<link rel="stylesheet" href="'+ ftui.config.basedir + '../codemirror/codemirror.css" type="text/css" />');   
 
@@ -122,10 +138,10 @@ function depends_wdtimer (){
      	else
 			$('head').append('<link rel="stylesheet" href="'+ ftui.config.basedir + 'lib/switchery.min.css" type="text/css" />');      
 
-        deps.push("lib/switchery.min.js");        
+        deps.push(ftui.config.basedir + "lib/switchery.min.js");        
     }
     if (!$.fn.draggable){
-        deps.push("../pgm2/jquery-ui.min.js");            
+        deps.push(ftui.config.basedir + "lib/jquery-ui.min.js");
     }
     
     return deps;    
@@ -387,7 +403,7 @@ var Modul_wdtimer = function () {
 		var style_visible = " style='visibility: visible'";
 		var t_type = (style.indexOf('nokeyboard')>-1)?"'image'":"'text'";
 
-        result += "<div data-profile='"+id+"' id='profile"+id+"' class='wdtimer_profile row "+style+"'>" +
+        result += "<div data-profile='"+id+"' id='profile"+id+"' class='wdtimer_profile "+style+"'>" +
                   "  <div class='wdtimer_profilerow' >"+
                   "    <div class='wdtimer_profileweekdays inline'>" +
                   "       <div class='wdtimer_checkbox begin "+theme+" "+style+"'><input type='checkbox' id='checkbox_mo-reihe"+id+"' "+wdtimer_getCheckedString(profile[0][1])+"/><label class='begin' for='checkbox_mo-reihe"+id+"'>Mo</label></div>"+
@@ -762,9 +778,11 @@ var Modul_wdtimer = function () {
 			cache: false,
 			context:{'DEF': 'DEF'},            
 			url: $("meta[name='fhemweb_url']").attr("content") || "/fhem/",
+			fwcsrf: ftui.config.csrf?ftui.config.csrf:'',
 			data: {
 				cmd: ["list",attr_device].join(' '),
-				XHR: "1"
+				XHR: "1",
+				fwcsrf: ftui.config.csrf?ftui.config.csrf:''
 			}            
 		})
 		.done(function(data ) {
