@@ -1,8 +1,8 @@
-# fhem-ftui-widgets
+<h1># fhem-ftui-widgets</h1>
 
 The following widgets are currently included:
 
-<h1>Chart Widget:</h1>
+<h2>Chart Widget:</h2>
 
 Widget for creating chart plots in the FHEM Tablet UI User Interface Framework (FTUI).
 
@@ -17,7 +17,7 @@ See:
 [Link to Chart Widget Wiki](https://www.google.de/url?sa=t&rct=j&q=&esrc=s&source=web&cd=2&cad=rja&uact=8&ved=0ahUKEwiZ3PDUqdPTAhVLaxQKHdj1BKgQFggoMAE&url=https%3A%2F%2Fwiki.fhem.de%2Fwiki%2FFTUI_Widget_Chart&usg=AFQjCNHz2utN-sko8Mh0hIuwcvEAkAtiQA)
 for details about the using and features of the chart widget.
 
-<h1>(Google) Maps Widget:</h1>
+<h2>(Google) Maps Widget:</h2>
 
 Widget for showing maps and mapping of any kind of information from FHEM onto a map
 
@@ -27,14 +27,14 @@ See:
 [Link to Forum Discussion](https://forum.fhem.de/index.php/topic,78379.msg703359.html#msg703359)
 for details of capabilities and usage.
 
-<h1>Scrollabel Widget:</h1>
+<h2>Scrollabel Widget:</h2>
 
 Widget for scrolled text in vertical and horizontal direction
 
 See:
 [Link to Forum Discussion](https://forum.fhem.de/index.php/topic,73497.msg651559.html#msg651559)
 
-<h1>Weekday Timer Widget:</h1>
+<h2>Weekday Timer Widget:</h2>
 
 Extension for existing Widget to show FHEM Weekday Timer
 
