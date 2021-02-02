@@ -2,7 +2,7 @@
  * Copyright (c) 2015-2017 Kurt Eckert
  * Under MIT License (http://www.opensource.org/licenses/mit-license.php)
  */
-/* Version 2.2
+/* Version 2.5
 /* Compatible FTUI Version >= 2.7
 */
 
