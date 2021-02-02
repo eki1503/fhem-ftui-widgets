@@ -13,7 +13,6 @@ function depends_maps (){
 		(function(){
 			var attachEvent = document.attachEvent;
 			var isIE = navigator.userAgent.match(/Trident/);
-			console.log(isIE);
 
 			var requestFrame = (function(){
 				var raf =	window.requestAnimationFrame ||
@@ -160,83 +159,130 @@ var wrMaps = function () {
 			if (this.type == 'OSM') {
 				var osmMap = L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 					attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+					maxZoom: options.maxZoom,
+					minZoom: options.minZoom,
+					maxNativeZoom: options.maxNativeZoom,
 					subdomains: ['a', 'b', 'c'] });
 				var Esri_WorldImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-					attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+					attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+					maxZoom: options.maxZoom,
+					minZoom: options.minZoom,
+					maxNativeZoom: options.maxNativeZoom,
 				});
 				var Map = new L.map(id, $.extend({ layers: [osmMap] }, options));
 				osmMap.addTo(Map);
 				Map.data = {};
 				Map.data.layerControl = new L.control.layers({ "OSM": osmMap, "Satellite": Esri_WorldImagery }, null).addTo(Map);
 				Map.data.added = false;
+				Map.data.geojsonOnAdd = function (Map) {
+					Map.data.geojson.on('add', function () {
+						// need to set feature specific styles here according to saved feature styles as only now all feature objects are accessible
+						$(document).find('.leaflet-control-layers-selector').css({ 'visibility': 'visible' }).parent().css({ 'text-align': 'start' });
+						if (Map.data.featureStyles) {
+							$.each(Map.data.featureStyles, function (index, value) {
+								var elm = $(document).find('[id="' + Map.data.featureStyles[index].id + '"]'); // modify label according to saved feature style
+								if (elm.length && elm.length > 0) {
+									if (Map.data.featureStyles[index].style.label || Map.data.featureStyles[index].style.icon) {
+										elm.parent().find('svg').remove(); // there are other information to be displayed, don't need standard symbols any more
+										elm.css(Map.data.flattenOptions(Map.data.featureStyles[index].style));
+										if (Map.data.featureStyles[index].style.label) {
+											if (Map.data.featureStyles[index].style.label.cls) elm.addClass(Map.data.featureStyles[index].style.label.cls);
+											elm.html(Map.data.featureStyles[index].style.label.text);
+											if (Map.data.featureStyles[index].style.label.color) elm.css('color', Map.data.featureStyles[index].style.label.color);
+										}
+										var mtop = (elm.parent().parent().height()-elm.height())/2;
+										var mleft = (elm.parent().parent().width()-elm.width())/2;
+										elm.css('display','grid'); // make sure to override
+										if (!Map.data.featureStyles[index].style.label) {
+											elm.css('width',elm.parent().parent().width());
+											elm.css('height',elm.parent().parent().height());
+											elm.css('margin-left',0);
+											elm.css('margin-top',0);
+										} else {
+											elm.css('margin-left',parseFloat(mleft));
+											elm.css('margin-top',parseFloat(mtop));
+										}
+										if (Map.data.featureStyles[index].style.icon && Map.data.featureStyles[index].style.icon != 'no-icon') {
+											if (typeof Map.data.featureStyles[index].style.icon.indexOf != 'undefined') var url = Map.data.featureStyles[index].style.icon.indexOf('http') > -1 ? Map.data.featureStyles[index].style.icon : document.location.origin + '/fhem/images/' + Map.data.featureStyles[index].style.icon;
+											if (Map.data.featureStyles[index].style.icon.url && typeof Map.data.featureStyles[index].style.icon.url.indexOf != 'undefined') var url = Map.data.featureStyles[index].style.icon.url.indexOf('http') > -1 ? Map.data.featureStyles[index].style.icon.url : document.location.origin + '/fhem/images/' + Map.data.featureStyles[index].style.icon.url;
+											if (elm.prev().length == 0) { // no img element existing yet, create one
+												var img = $('<img style="position: absolute; margin-left:' + -elm.parent().parent().width()/2 + 'px; width:' + elm.parent().parent().width() + 'px; height:' + elm.parent().parent().height() + 'px;" src="' + url + '"></img>');
+												elm.before(img);
+											} else {
+												elm = elm.prev().attr('src', url); // modify icon according to save feature style
+												elm.prev().css('width',elm.parent().parent().width());
+												elm.prev().css('height',elm.parent().parent().height());
+											}
+										} else if (Map.data.featureStyles[index].style.icon) {
+											elm = elm.prev().css('opacity', 0); // modify icon according to save feature style (hide icon)
+										}
+									}
+								}
+
+								elm = $(document).find('[class*="' + Map.data.featureStyles[index].id + '"]');
+								if (elm.length && elm.length > 0) {
+									if (Map.data.featureStyles[index].style) {
+										var opts = Map.data.flattenOptions(Map.data.featureStyles[index].style);
+										elm.css(opts);
+										if (elm.attr('stroke') && opts.color) elm.attr({ 'stroke': opts.color });
+										if (elm.attr('stroke-opacity') && opts.strokeOpacity) elm.attr({ 'stroke-opacity': '1' }); // be sure we do not set opacity twice
+										elm.attr({ 'id': Map.data.featureStyles[index].id });
+									}
+								}
+							});
+						}
+						Map.data.added = true;
+					});					
+				}
+
 				Map.data.loadGeoJson = function (path) {
 					var xhr = new XMLHttpRequest();
-					xhr.open('GET', path);
+					xhr.open('POST', path);
 					xhr.setRequestHeader('Content-Type', 'application/json');
 					xhr.onload = function () {
 						if (xhr.status === 200) {
-							Map.data.geojson = L.geoJSON(JSON.parse(xhr.responseText), options); // do this in order to have the geojson object for setStyle etc.
+							//Map.data.geojson = L.geoJSON(JSON.parse(xhr.responseText), options); // do this in order to have the geojson object for setStyle etc.
 							options = {
 								onEachFeature: Map.data.addfeatureCallback
 							};
 							if (Map.data.style) options.style = Map.data.style;
 							if (Map.data.pointToLayer) options.pointToLayer = Map.data.pointToLayer;
 							Map.data.geojson = L.geoJSON(JSON.parse(xhr.responseText), options);
-							Map.data.geojson.on('add', function () {
-								// need to set feature specific styles here according to saved feature styles as only now all feature objects are accessible
-								$(document).find('.leaflet-control-layers-selector').css({ 'visibility': 'visible' }).parent().css({ 'text-align': 'start' });
-								if (Map.data.featureStyles) {
-									$.each(Map.data.featureStyles, function (index, value) {
-										var elm = $(document).find('[id="' + Map.data.featureStyles[index].id + '"]'); // modify label according to saved feature style
-										if (elm.length && elm.length > 0) {
-											if (Map.data.featureStyles[index].style.label) {
-												elm.parent().find('svg').remove(); // there other information to be displayed, don't need standard symbols any more
-												elm.css(Map.data.flattenOptions(Map.data.featureStyles[index].style));
-												if (Map.data.featureStyles[index].style.label.cls) elm.addClass(Map.data.featureStyles[index].style.label.cls);
-												elm.html(Map.data.featureStyles[index].style.label.text);
-												elm.css('margin-left',parseInt(Map.data.featureStyles[index].style.label.fontSize)/-2);
-												elm.css('margin-top',parseInt(Map.data.featureStyles[index].style.label.fontSize)/-2);
-												if (Map.data.featureStyles[index].style.label.color) elm.css('color', Map.data.featureStyles[index].style.label.color);
-												if (Map.data.featureStyles[index].style.icon && Map.data.featureStyles[index].style.icon != 'no-icon') {
-													if (typeof Map.data.featureStyles[index].style.icon.indexOf != 'undefined') var url = Map.data.featureStyles[index].style.icon.indexOf('http') > -1 ? Map.data.featureStyles[index].style.icon : document.location.origin + '/fhem/images/' + Map.data.featureStyles[index].style.icon;
-													if (Map.data.featureStyles[index].style.icon.url && typeof Map.data.featureStyles[index].style.icon.url.indexOf != 'undefined') var url = Map.data.featureStyles[index].style.icon.url.indexOf('http') > -1 ? Map.data.featureStyles[index].style.icon.url : document.location.origin + '/fhem/images/' + Map.data.featureStyles[index].style.icon.url;
-													elm = elm.prev().attr('src', url); // modify icon according to save feature style
-												} else if (Map.data.featureStyles[index].style.icon) {
-													elm = elm.prev().css('opacity', 0); // modify icon according to save feature style (hide icon)
-												}
-											}
-										}
-
-										elm = $(document).find('[class*="' + Map.data.featureStyles[index].id + '"]');
-										if (elm.length && elm.length > 0) {
-											if (Map.data.featureStyles[index].style) {
-												var opts = Map.data.flattenOptions(Map.data.featureStyles[index].style);
-												elm.css(opts);
-												if (elm.attr('stroke') && opts.color) elm.attr({ 'stroke': opts.color });
-												if (elm.attr('stroke-opacity') && opts.strokeOpacity) elm.attr({ 'stroke-opacity': '1' }); // be sure we do not set opacity twice
-												elm.attr({ 'id': Map.data.featureStyles[index].id });
-											}
-										}
-									});
-								}
-								Map.data.added = true;
-							});
+							Map.data.geojsonOnAdd(Map);
 							Map.data.geojson.addTo(Map);
 						}
 					};
 					xhr.send();
 				};
+				Map.data.addGeoJson = function (data,opt) {
+					//Map.data.geojson = L.geoJSON(data, opt); // do this in order to have the geojson object for setStyle etc.
+					options = {
+						onEachFeature: Map.data.addfeatureCallback
+					};
+					if (Map.data.style) options.style = Map.data.style;
+					if (Map.data.pointToLayer) options.pointToLayer = Map.data.pointToLayer;
+					Map.data.geojson = L.geoJSON(data, options);
+					Map.data.geojsonOnAdd(Map);
+					Map.data.geojson.addTo(Map);
+					return Map.data.features;
+				};
+				Map.data.remove = function(feature) {
+					Map.removeLayer(Map.data.geojson);
+					Map.data.numFeatures = 0;
+					Map.data.featureStyles = [];
+					Map.data.added = false;
+				};
 				Map.getLayerControl = function () {
 					return Map.data.layerControl;
 				};
 				Map.copyCenter = function (newcenter) {
-					var oldcenter = { lng: 0, lat: 0 };
+					var oldcenter = { lng: 0.0, lat: 0.0 };
 					oldcenter.lat = newcenter.lat;
 					oldcenter.lng = newcenter.lng;
 					return oldcenter;
 				};
 				Map.setCenter = function (center) {
-					this.setView(center);
+					this.setView(center,this.getZoom(),{reset:true});
 				};
 				Map.data.flattenOptions = function (options) {
 					var inopts = $.extend(options, options.label);
@@ -255,14 +301,18 @@ var wrMaps = function () {
 				Map.data.setStyle = function (options) {
 					this.pointToLayer = function (geoJsonPoint, latlng) {
 						if (!Map.data.numFeatures) Map.data.numFeatures = 0;
-						if (!geoJsonPoint.id) geoJsonPoint.id = 'ownId/' + Map.data.numFeatures;
-						var html = options.icon.options.html.replace(/id=(\".*\"|'')/, 'id="' + geoJsonPoint.id + '" ');
-						var icon = new L.DivIcon($.extend(options.icon.options, { className: 'my-div-icon', html: html }));
-						return L.marker(latlng, { icon: icon });
+						if (!geoJsonPoint.id) geoJsonPoint.id = 'ownId/'+ Map.elem.data().instance + '/' + Map.data.numFeatures;
+						if (options.icon) {
+							var html = options.icon.options.html.replace(/id=(\".*\"|'')/, 'id="' + geoJsonPoint.id + '" ');
+							var icon = new L.DivIcon($.extend(options.icon.options, { className: 'my-div-icon', html: html }));
+							return L.marker(latlng, { icon: icon });
+						} else {
+							return L.marker(latlng);
+						}
 					};
 					this.style = function (geoJsonFeature) {
 						if (!Map.data.numFeatures) Map.data.numFeatures = 0;
-						if (!geoJsonFeature.id) geoJsonFeature.id = 'ownId/' + Map.data.numFeatures;
+						if (!geoJsonFeature.id) geoJsonFeature.id = 'ownId/' + Map.elem.data().instance + '/' + Map.data.numFeatures;
 						if (!Map.data.features) Map.data.features = {};
 						Map.data.numFeatures++;
 						if (!Map.data.features[geoJsonFeature.id]) Map.data.features[geoJsonFeature.id] = {};
@@ -323,10 +373,16 @@ var wrMaps = function () {
 			} else {
 				var Map = new google.maps.Map(id, options);
 				Map.copyCenter = function (newcenter) {
-					var oldcenter = { lng: 0, lat: 0 };
+					var oldcenter = { lng: 0.0, lat: 0.0 };
 					oldcenter.lat = newcenter.lat;
 					oldcenter.lng = newcenter.lng;
 					return oldcenter;
+				};
+				Map.setMaxZoom = function (newmax) {
+					this.maxZoom = newmax;
+				};
+				Map.setMinZoom = function (newmin) {
+					this.minZoom = newmin;
 				};
 			}
 			return Map;
@@ -339,7 +395,7 @@ var wrMaps = function () {
 					if (typeof tomtom != 'undefined') {
 						return waitForTrafficPlugin();
 					} else {
-						setTimeout(waitForBasePlugin(), 500);
+						setTimeout(function() {waitForBasePlugin();}, 500);
 					}
 				};
 
@@ -347,26 +403,31 @@ var wrMaps = function () {
 					if (typeof L.TomTomTrafficFlowLayer != 'undefined' && typeof tomtom != 'undefined') {
 						var apiKey = $("meta[name='TomTomApiKey']").attr("content");
 						tomtom.setProductInfo('Test', '1.0');
-						return new L.TomTomTrafficFlowLayer({ key: apiKey+'&thickness='+Math.min(Math.max(thickness,1),20), style: 'relative' });
+						var TrafficLayer =  new L.TomTomTrafficFlowLayer({ key: apiKey+'&thickness='+Math.min(Math.max(thickness,1),20), style: 'relative' });
+
+						TrafficLayer.setMap = function (map) {
+							this.map = map;
+							if (!this.map.tlayer_added) this.addTo(map); // only add a traffic layer to this map if not already done
+							this.map.tlayer_added = true;
+						};
+
+						TrafficLayer.getMap = function (map) {
+							return this.map ? this.map : null;
+						};
+
+						return TrafficLayer;
+
 					} else {
-						setTimeout(waitForTrafficPlugin(), 500);
+						setTimeout(function() {waitForTrafficPlugin();}, 500);
 					}
 				};
 
-				var TrafficLayer = waitForBasePlugin();
+				return waitForBasePlugin();
 
-				TrafficLayer.setMap = function (map) {
-					this.map = map;
-					this.addTo(map);
-				};
-
-				TrafficLayer.getMap = function (map) {
-					return this.map ? this.map : null;
-				};
 			} else {
 				var TrafficLayer = new google.maps.TrafficLayer();
+				return TrafficLayer;
 			}
-			return TrafficLayer;
 		}
 	}, {
 		key: 'Point',
@@ -397,6 +458,10 @@ var wrMaps = function () {
 						this.removeFrom(this.map);
 					}
 				};
+				Marker.remove = function () {
+					this.removeFrom(this.map);
+					delete this;
+				};
 				Marker.addListener = function (type, callback) {
 					this.on(type, callback);
 				};
@@ -408,7 +473,27 @@ var wrMaps = function () {
 	}, {
 		key: 'Polyline',
 		value: function Polyline(options) {
-			var Polyline = this.type == 'OSM' ? new L.Polyline(options) : new google.maps.Polyline(options);
+			if (this.type == 'OSM') {
+				var latlngs = [];
+				$.each(options.path, function(ind,val){
+					latlngs.push([val.lat,val.lng]);
+				});
+				var Polyline = new L.polyline(latlngs,options).addTo(options.map);
+				Polyline.map = options.map;
+				Polyline.addListener = function (type, callback) {
+					this.on(type, callback);
+				};
+				Polyline.doRemove = function () {
+					this.remove();
+					delete this;
+				};
+			} else {
+				var Polyline = new google.maps.Polyline(options);
+				Polyline.doRemove = function () {
+					this.setMap(null);
+					delete this;
+				};
+			}
 			return Polyline;
 		}
 	}, {
@@ -485,6 +570,143 @@ var wrMaps = function () {
 				};
 			}
 			return DirectionsService;
+		}
+	}, {
+		key: 'GroundOverlay',
+		value: function GroundOverlay(url,inbounds,options) {
+			if (this.type == 'OSM') {
+				var bounds = [];
+				bounds[0] = [inbounds.north,inbounds.west];
+				bounds[1] = [inbounds.south,inbounds.east];
+				var GroundOverlay = new L.imageOverlay(url,bounds,options);
+
+				GroundOverlay.setMap = function (map) {
+					if (map == null) {
+						if (this.map.ovllayer_added) this.removeFrom(this.map);
+						this.map.ovllayer_added = false;
+					} else {
+						this.map = map;
+						if (!this.map.ovllayer_added) this.addTo(map); // only add a overlay layer to this map if not already done
+						this.map.ovllayer_added = true;
+					}
+				};
+
+				GroundOverlay.getMap = function (map) {
+					return this.map ? this.map : null;
+				};
+
+				GroundOverlay.addListener = function (type, callback) {
+					this.on(type, callback);
+				};
+
+				GroundOverlay.setMap(options.map);
+				if (options.opacity) options.map.elem.find('[class*="leaflet-image-layer"]').css('opacity',options.opacity);
+		
+			} else {
+				var GroundOverlay = new google.maps.GroundOverlay(url,inbounds,options);
+				GroundOverlay.setOpacity(parseFloat(options.opacity));
+				GroundOverlay.options = options;
+			}
+			return GroundOverlay;
+		}
+	}, {
+		key: 'Heatmap',
+		value: function Heatmap(invalues,options) {
+			if (this.type == 'OSM') {
+				var waitForBasePlugin2 = function waitForBasePlugin2(options) {
+					if (typeof L.heatLayer != 'undefined') {
+						return doSetupHeatmap(options);
+					} else {
+						setTimeout(function() {waitForBasePlugin2(options);}, 500);
+					}
+				};
+
+				var doSetupHeatmap = function doSetupHeatmap(options) {
+					var Heatmap = new L.heatLayer([]);
+					var loptions = {};
+					if (options.opacity) loptions.opacity = parseFloat(options.opacity);
+					if (options.minzoom) loptions.minzoom = parseInt(options.minzoom);
+					if (options.maxzoom) loptions.maxzoom = parseInt(options.maxzoom);
+					if (options.radius) loptions.radius = parseInt(options.radius);
+					
+					if (options.opacity) options.map.elem.find('[class*="leaflet-heatmap-layer"]').css('opacity',options.opacity);
+					var length = options.gradient.length;
+					if (options.gradient) {
+						loptions.gradient = {};
+						options.gradient.forEach(function(item,index){
+							var prop = parseInt(index/length*10)/10;
+							loptions.gradient[prop] = options.gradient[index];
+						});
+					}
+					Heatmap.setOptions(loptions);
+
+					Heatmap.setMap = function (map) {
+						if (map == null) {
+							if (this.map.hmlayer_added) this.removeFrom(this.map);
+							this.map.hmlayer_added = false;
+						} else {
+							this.map = map;
+							if (!this.map.hmlayer_added) this.addTo(map); // only add a heatmap layer to this map if not already done
+							this.map.hmlayer_added = true;
+						}
+					};
+
+					Heatmap.getMap = function (map) {
+						return this.map ? this.map : null;
+					};
+
+					Heatmap.update = function (invalues) {
+						var values = [];
+						invalues.forEach(function(item,index){
+							var hmp = item.split(",");
+							if (hmp && hmp.length && hmp.length >=2) {
+								var tmp = hmp[0];
+								hmp[0] = hmp[1];
+								hmp[1] = tmp;
+							}
+							values.push(hmp);
+						});
+						this.setLatLngs(values);
+					};
+
+					Heatmap.addListener = function (type, callback) {
+						this.on(type, callback);
+					};
+
+					Heatmap.setMap(options.map);
+					Heatmap.update(invalues);
+					options.map.getLayerControl().addOverlay(Heatmap,((options.map.elem.data('language')=='de')?'Heatmap':'Heatmap'));
+					options.map.elem.data('htm_buttons_done',true);
+					options.map.elem.data('heatmap_layer',Heatmap);
+					return Heatmap;
+				}
+				
+				return waitForBasePlugin2(options);
+				
+			} else {
+				var Heatmap = new google.maps.visualization.HeatmapLayer();
+				
+				Heatmap.update = function (invalues) {
+					var values = [];
+					invalues.forEach(function(item,index){
+						var hmp = item.split(",");
+						if (hmp && hmp.length && hmp.length >=2) {
+							var tmp = hmp[0];
+							hmp[0] = hmp[1];
+							hmp[1] = tmp;
+						}
+						var newdata = {"location":new google.maps.LatLng(parseFloat(hmp[0]),parseFloat(hmp[1])),"weight":parseFloat(hmp[2])};
+						values.push(newdata);
+					});
+					this.setData(values);
+				};
+
+				Heatmap.setOptions(options);
+				Heatmap.options = options;
+				Heatmap.setMap(options.map);
+				Heatmap.update(invalues);
+				return Heatmap;
+			}
 		}
 	}, {
 		key: 'DirectionsRenderer',
@@ -598,6 +820,9 @@ var wrMaps = function () {
 		value: function ConvertOptions(options) {
 			if (this.type == 'OSM') {
 				var osmOptions = options;
+				if (options.PolylineOptions && options.PolylineOptions.strokeColor) options.color = options.PolylineOptions.strokeColor;
+				if (options.PolylineOptions && options.PolylineOptions.strokeWeight) options.weight = options.PolylineOptions.strokeWeight;
+				if (options.PolylineOptions && options.PolylineOptions.strokeOpacity) options.opacity = options.PolylineOptions.strokeOpacity;
 				var ConvertIcon = function ConvertIcon(icon, options) {
 					var html = '<div>';
 					var toPoint = function toPoint(size) {
@@ -607,11 +832,11 @@ var wrMaps = function () {
 					if (options.icon && options.icon.scale) options.icon.iconSize = toPoint(options.icon.scale);
 					if (options.icon && options.icon.scaledSize) options.icon.iconSize = toPoint(options.icon.scaledSize);
 					if (options.label && options.label.fontSize) options.icon.iconSize = toPoint(parseFloat(options.label.fontSize));
-					if (options.icon && options.icon.path) html += '<svg style="position: absolute; margin-left:' + -options.icon.iconSize[0] / 4 + 'px; margin-top: ' + -options.icon.iconSize[1] / 2 + 'px; width:' + options.icon.iconSize[0] / 2 + 'px; height:' + options.icon.iconSize[1] + 'px;" viewBox="-10 -40 20 40"><path d="' + options.icon.path + '"></path></svg>'; // only draw default symbol when no other settings are there
+					if (options.icon && options.icon.path && !icon.url) html += '<svg style="position: absolute; margin-left:' + -options.icon.iconSize[0] / 4 + 'px; margin-top: ' + -options.icon.iconSize[1] / 2 + 'px; width:' + options.icon.iconSize[0] / 2 + 'px; height:' + options.icon.iconSize[1] + 'px;" viewBox="-10 -40 20 40"><path d="' + options.icon.path + '"></path></svg>'; // only draw default symbol when no other settings are there
 					if (icon.url) html += '<img style="position: absolute; margin-left:' + -options.icon.iconSize[0] / 2 + 'px; width:' + options.icon.iconSize[0] + 'px; height:' + options.icon.iconSize[1] + 'px;" src="' + icon.url + '"></img>';
 					if (options.label) {
 						html += "<div class='" + (options.label.cls?options.label.cls:'') + "' id='" + (options.id ? options.id : "") + "' style='position: absolute;" + " color: " + (options.label.color ? options.label.color : "black") + "; font-size: " + options.label.fontSize + "; margin-left: " + parseInt(options.label.fontSize)/-2 + "px; margin-top: " + parseInt(options.label.fontSize)/-2 + "px;'>" + options.label.text + "</div>";
-						if (options.label.text != ' ') html = html.replace(/\<svg.*\/svg\>/,''); // there other information to be displayed, don't need standard symbols any more
+						if (options.label.text != ' ' || icon.url) html = html.replace(/\<svg.*\/svg\>/,''); // there other information to be displayed, don't need standard symbols any more
 					}
 					html += '</div>';
 					var divIcon = new L.DivIcon($.extend(options.icon, { className: 'my-div-icon', html: html }));
@@ -683,13 +908,14 @@ var wrMaps = function () {
 			var style = '';
 			feature.forEachProperty(function (val, prop) {
 				if (data.feature_style && data.feature_style.display_styles && !style) {
-					if (data.feature_style.display_styles[prop + '.' + val]) style = JSON.parse(JSON.stringify(data.feature_style.display_styles[prop + '.' + val])); // clone input object
+					if (data.feature_style.display_styles[prop + '.' + val]) style = $.extend(style,JSON.parse(JSON.stringify(data.feature_style.display_styles[prop + '.' + val]))); // clone input object
 					if (!style && data.feature_style.display_styles[prop]) style = JSON.parse(JSON.stringify(data.feature_style.display_styles[prop])); // clone input object
 					if (style && style.label) {
 						var plOptions = data.getPolylineOptions()[0];
 						var strokeWeight = style.strokeWeight ? style.strokeWeight : plOptions.strokeWeight ? plOptions.strokeWeight : 7;
 						feature.setProperty('strokeWeight', strokeWeight);
-						style.label = get_label(style.label, elem);
+						var scale = strokeWeight/(data.map_type=='OSM'?1:22);
+						if (!style.label.text) style.label = get_label(style.label, elem);
 						style.label.color = style.strokeColor;
 						if (geojsoptions.label && geojsoptions.label.fontSize) style.label.fontSize = geojsoptions.label.fontSize;
 						if (style.fontSize) style.label.fontSize = style.fontSize;
@@ -698,8 +924,14 @@ var wrMaps = function () {
 					if (style && style.strokeWeight) style.strokeWidth = style.strokeWeight; // make sure that strokeWeight and strokeWidth are the same values (difference in naming in HTML and Google Maps API)
 					if (style && style.strokeWidth) style.strokeWeight = style.strokeWidth; // make sure that strokeWeight and strokeWidth are the same values (difference in naming in HTML and Google Maps API)
 					if (style && style.icon && style.icon != 'no-icon' && !style.icon.scaledSize) {
-						var icon = { url: style.icon, scaledSize: { width: parseInt(style.label.fontSize), height: parseInt(style.label.fontSize) } };
+						var fontsize = style.label?style.label.fontSize:style.fontSize;
+						var icon = { url: style.icon};
+						if (fontsize) feature.setProperty('strokeWeight', fontsize);
 						style.icon = icon;
+						if (geojsoptions.icon) {
+							style.icon = $.extend(style.icon,geojsoptions.icon);
+						}
+						if (!style.icon.scaledSize) style.icon.scaledSize =  { width: parseInt(fontsize), height: parseInt(fontsize) };
 					}
 				}
 			});
@@ -734,15 +966,15 @@ function get_label(inlabel,elem) {
 	return label;
 }
 
-function loadMapsAPI(elem) {
+function loadMapsAPI(elem,me) {
 
 	if (elem.data('map_type') == 'OSM')
-		loadOSMMapsAPI(elem);
+		loadOSMMapsAPI(elem,me);
 	else
 		loadGoogleMapsAPI(elem)
 }
 
-function loadOSMMapsAPI(elem) {
+function loadOSMMapsAPI(elem,me) {
 	if (($('head').find("script[src*='https://unpkg.com/leaflet@1.3.1/dist/leaflet.js']").length <= 0)) {
 		var lnk = document.createElement("link");
 		lnk.href = "https://unpkg.com/leaflet@1.3.1/dist/leaflet.css";
@@ -786,26 +1018,32 @@ function loadOSMMapsAPI(elem) {
 		}*/
 
 		if (elem.data('traffic') || elem.data('directions')) {
-		if (($('head').find("script[src*='./lib/tomtom/tomtom.min.js']").length <= 0)) {
-			script = document.createElement("script");
-			script.src = './lib/tomtom/tomtom.min.js';
-			script.crossOrigin = "";
-			document.getElementsByTagName("head")[0].appendChild(script);
+			if (($('head').find("script[src*='./lib/tomtom/tomtom.min.js']").length <= 0)) {
+				script = document.createElement("script");
+				script.src = './lib/tomtom/tomtom.min.js';
+				script.crossOrigin = "";
+				document.getElementsByTagName("head")[0].appendChild(script);
 
-			lnk = document.createElement("link");
-			lnk.href = "./lib/tomtom/map.css";
-			lnk.integrity = "";
-			document.getElementsByTagName("head")[0].appendChild(lnk);
-		}
+				lnk = document.createElement("link");
+				lnk.href = "./lib/tomtom/map.css";
+				lnk.integrity = "";
+				document.getElementsByTagName("head")[0].appendChild(lnk);
+			}
 		}
 		
-		if (typeof tomtom != 'undefined' || (!elem.data('traffic') && !elem.data('directions'))) { // wait until all additions to leaflet are loaded
+		var needsTomTom = false;
+		me.elements.each(function (index) {
+			elem = $(this);
+			if (elem.data('traffic') || elem.data('directions')) needsTomTom = true;
+		});
+
+		if (typeof tomtom != 'undefined' || (!needsTomTom)) { // wait until all additions to leaflet are loaded
 			mapsAPIReady('OSM');
 		} else {
-			setTimeout(function(){loadOSMMapsAPI(elem);},500);
+			setTimeout(function(){loadOSMMapsAPI(elem,me);},500);
 		}
 	} else {
-		setTimeout(function(){loadOSMMapsAPI(elem);},500);
+		setTimeout(function(){loadOSMMapsAPI(elem,me);},500);
 	}
 }
 
@@ -814,7 +1052,7 @@ function loadGoogleMapsAPI(elem) {
 		var apiKey = $("meta[name='GoogleMapsApiKey']").attr("content");
 		if (apiKey) {
 			var script = document.createElement("script");
-			script.src = 'https://maps.googleapis.com/maps/api/js?key='+apiKey+'&callback=mapsAPIReady';
+			script.src = 'https://maps.googleapis.com/maps/api/js?key='+apiKey+'&libraries=visualization&callback=mapsAPIReady';
 			document.getElementsByTagName("head")[0].appendChild(script);
 		} else {
 			ftui.toast('Could not find API Key, please add <meta name="GoogleMapsApiKey" content="<APIKey>"> to your html','error');
@@ -838,6 +1076,10 @@ function mapsAPIReady(type) {
 	}
 }
 
+function getCheckValue(reading) {
+	if (!reading) return '';
+	return reading.Value?reading.Value:'';
+}
 
 var Modul_maps = function () {
 	function refresh(elem) {
@@ -860,6 +1102,7 @@ var Modul_maps = function () {
         elem.initData('waypoints', 'waypoints');
         elem.initData('returnWaypoints', 'returnWaypoints');
         elem.initData('travelMode', 'travelMode');
+        elem.initData('triggerRedraw', 'STATE');
         elem.initData('includeReturn', 'includeReturn');
         elem.initData('language', 'language');
         elem.initData('delay', 'delay');
@@ -886,6 +1129,8 @@ var Modul_maps = function () {
 		elem.initData('style', 'default');
 		elem.initData('nightmode',false);
 		elem.initData('traffic_thickness','5');
+		elem.initData('minzoom', 0);
+		elem.initData('maxzoom', 18);
 
 		me.addReading(elem,'get');
 		me.addReading(elem,'name');
@@ -902,6 +1147,7 @@ var Modul_maps = function () {
 		me.addReading(elem,'waypoints');
 		me.addReading(elem,'returnWaypoints');
 		me.addReading(elem,'travelMode');
+		me.addReading(elem,'triggerRedraw');
 		me.addReading(elem,'includeReturn');
 		me.addReading(elem,'language');
 		me.addReading(elem,'delay');
@@ -911,6 +1157,19 @@ var Modul_maps = function () {
 		me.addReading(elem,'duration_in_traffic');
 		me.addReading(elem,'return_duration_in_traffic');
 		me.addReading(elem,'eta');
+
+		if (elem.data('heatmap')) {
+			var hpars = elem.data('heatmap').split(",");
+			if (hpars && hpars.length && hpars.length >=1) {
+				elem.data('heatmap_reading',hpars[0]);
+				me.addReading(elem,'heatmap_reading');
+			}
+		}
+
+		if (elem.data('blitzer')) {
+			if (!elem.data('blitzer').match(/:/)) elem.data('blitzer',elem.data('blitzer')+":status");
+			me.addReading(elem,'blitzer');
+		}
 
 		var data = elem.data();
 		elem.initData('directions',check_reading(elem,'start_address'));
@@ -924,6 +1183,91 @@ var Modul_maps = function () {
 			return (mm[1]?mm:"0"+mm[0]);
 		};
 
+	}
+
+	function getBlitzerJson(elem,geojsoptions) {
+		var data = elem.data();
+		
+		if (data.blitzer == undefined) return;
+
+		$.ajax({
+			async: true,
+			timeout: 15000,
+			cache: false,
+			dataType: 'json',
+			context:{'DEF': 'DEF','data':data,'attr_device':data.blitzer.split(':')[0]},
+			url: $("meta[name='fhemweb_url']").attr("content") || "/fhem/",
+			fwcsrf: ftui.config.csrf?ftui.config.csrf:'',
+			data: {
+				cmd: "jsonlist2 "+data.blitzer.split(':')[0],
+				XHR: "1",
+				fwcsrf: ftui.config.csrf?ftui.config.csrf:''
+			}
+		})
+		.done(function(data) {
+			if (!data.Results[0]) return;
+			var readings = data.Results[0].Readings;
+			var i = 0;
+			var data = this.data;
+			var num;
+			
+			var geojson = '{ "type": "FeatureCollection", "features": [';
+
+			num = "00" + i;
+			num = num.slice(-2);
+			
+			var maxnum = readings["count"]?parseInt(getCheckValue(readings["count"])):10000;
+
+			while (readings[num+'id']) { // iterate through all readings
+				if (i<maxnum) {
+					geojson += '{ "type": "Feature",';
+					geojson += '"properties": {';
+					$.each(['backend','confirm_date','content','counter','country','country_code',
+							'create_date','display_name','distance','distanceShort','gps_status',
+							'id','info','lat_s','lng_s','polyline','postcode','road','street',
+							'suburb','town','type','vmax'],function(index,value) {
+						var val = getCheckValue(readings[num+value]);
+						val = val.replace(/"/g,''); // remove contained '"' because it will lead to errors in JSON.parse
+						geojson += '"'+value+'":"'+val+'",';
+					});
+					geojson = geojson.slice(0,-1); // remove the last ','
+					geojson += '},';
+
+					geojson += '"geometry": {';
+					geojson += '"type": "Point",';
+					geojson += '"coordinates": [';
+						geojson += getCheckValue(readings[num+'lng'])+',';
+						geojson += getCheckValue(readings[num+'lat']);
+					geojson += ']';
+					geojson += '}';
+
+					geojson += '},';
+				} else if (maxnum == 0){
+					geojson += ' ';
+				}
+
+				i++;
+				num = "00" + i;
+				num = num.slice(-2);
+			}
+
+			geojson = geojson.slice(0,-1); // remove the last ','
+			geojson += ']}';
+
+			if (!geojsoptions) {
+				var geojsoptions = {};
+				geojsoptions = get_options(elem,geojsoptions,data,'feature'); // get default style for GeoJson features
+			}
+
+			if (elem.data('blitzer_features')) { // remove old features
+				var features = elem.data('blitzer_features');
+				for (var i = 0; i < features.length; i++)
+					data.map.data.remove(features[i]);
+			}
+
+			var blitzer_features = data.map.data.addGeoJson(JSON.parse(geojson),geojsoptions);
+			elem.data('blitzer_features',blitzer_features);
+		});	
 	}
 
 	function init_map_options(elem) {
@@ -965,6 +1309,24 @@ var Modul_maps = function () {
 		elem.data('direction_request').provideRouteAlternatives = false;
 		if (!elem.data('direction_request').travelMode) elem.data('direction_request').travelMode = elem.data('travel_mode') ? elem.data('travel_mode').toUpperCase() : 'DRIVING';
 
+		if (elem.data('blitzer')) {
+			if (!elem.data('feature_style')) {
+				var options = '{"popup_properties_move":"vmax",'+
+								'"popup_properties_click":"name",'+
+								'"display_styles":{'+
+									'"display_name":{'+
+										'"label":"fa-exclamation-triangle",'+
+										'"opacity":"0.8",'+
+										'"strokeColor":"#FF0000",'+
+										'"fontSize":"20px",'+
+										'"strokeWeight":"2"'+
+									'}'+
+								'}'+
+							'}';
+				elem.data('feature_style',JSON.parse(options));
+			}
+		}
+
 		//elem.data('size') =  elem.data('size');
 	}
 
@@ -982,10 +1344,10 @@ var Modul_maps = function () {
         me.elements = $('div[data-type="' + me.widgetname + '"]', me.area);
         me.elements.each(function (index) {
             var elem = $(this);
-			loadMapsAPI(elem);
+			loadMapsAPI(elem,me);
             me.init_attr(elem);
-			me.init_map(elem);
 			me.init_map_options(elem);
+			me.init_map(elem);
 			if (elem.is(':visible')) {
 				me.init_ui(elem);
 			} else {
@@ -1090,6 +1452,23 @@ var Modul_maps = function () {
 
 	function display_features(elem) {
 		var data = elem.data();
+		
+		if (data.overlay) {
+			if (data.map.getZoom() >= data.overlay_layer.options.minzoom && data.map.getZoom() <= data.overlay_layer.options.maxzoom) {
+				data.overlay_layer.setMap(data.map);
+			} else {
+				data.overlay_layer.setMap(null);
+			}
+		}
+
+		if (data.heatmap) {
+			if (data.map.getZoom() >= data.heatmap_layer.options.minzoom && data.map.getZoom() <= data.heatmap_layer.options.maxzoom) {
+				data.heatmap_layer.setMap(data.map);
+			} else {
+				data.heatmap_layer.setMap(null);
+			}
+		}
+
 		data.map.data.forEach(function(feature) {
 			var style = '';
 			var found = false;
@@ -1134,7 +1513,7 @@ var Modul_maps = function () {
 
 		if (data.label) {
 			var label = get_label(data.label,elem);
-			if (data.icon && data.icon == 'no-icon') {
+			if ((data.icon && data.icon == 'no-icon') || !data.icon) {
 				label.color = plOptions.strokeColor; // if no icon is drawn, the label will be drawn in stroke color
 				icon = symbol_empty;
 			}
@@ -1158,7 +1537,7 @@ var Modul_maps = function () {
 				break;
 
 			case 'polyline':
-				options = plOptions;
+				options = $.extend(options,plOptions);
 				options.PolylineOptions = plOptions;
 				if (!options.markerOptions) options.markerOptions = {};
 				options.markerOptions.icon = symbol;
@@ -1169,9 +1548,14 @@ var Modul_maps = function () {
 			case 'feature':
 				options.icon = symbol;
 				if (label) options.label = label;
-				if (icon) options.icon = icon;
 				options = $.extend(options,plOptions);
 				options.PolylineOptions = plOptions;
+				if (icon) {
+					if (options.strokeWeight) {
+						icon.scaledSize = elem.data('mapAPIWrapper').Size(parseFloat(options.strokeWeight)*scale, parseFloat(options.strokeWeight)*scale);
+					}
+					options.icon = icon;
+				}
 				if (!options.markerOptions) options.markerOptions = {};
 				options.markerOptions.icon = symbol;
 				if (label) options.markerOptions.label = label;
@@ -1183,44 +1567,46 @@ var Modul_maps = function () {
 		return options;
 	}
 
-	function add_map_polyline(elem,polyline,position,title,makeContent,scale)
+	function add_map_polyline(elem,path,position,title,makeContent,scale)
 	{
 		var data = elem.data();
-		if (!polyline) polyline = {};
+		if (!data.polyline) data.polyline = {};
 
-		if (!polyline.infowindow) { // there should be only one infowindow per route
-			polyline.infowindow = elem.data('mapAPIWrapper').InfoWindow({
+		if (!data.polyline.infowindow) { // there should be only one infowindow per route
+			data.polyline.infowindow = elem.data('mapAPIWrapper').InfoWindow({
 				content: makeContent(elem)
 			});
 			elem.data('saved_center',elem.data('map').copyCenter(data.map_options.center));
-			polyline.infowindow.addListener('closeclick',function() {
+			data.polyline.infowindow.addListener('closeclick',function() {
 				this.close();
 				elem.data('map').setCenter(elem.data('saved_center'));
 			});
 		} else {
-			polyline.infowindow.setContent(makeContent(elem));
+			data.polyline.infowindow.setContent(makeContent(elem));
 		}
 
-		if (polyline && polyline.length && polyline.length > 0) {
+		if (path && path.length && path.length > 0) {
 			var options = {};
 			if (data.stroke) options = get_options(elem,options,data,'polyline',scale);
-			options.PolylineOptions.path = polyline;
+			options.path = path;
 			options.PolylineOptions.position = position;
+			options.map = elem.data('map');
 			options.PolylineOptions.map = elem.data('map');
 			options.PolylineOptions.title = title;
+			options = elem.data('mapAPIWrapper').ConvertOptions(options);
 
-			polyline.line = elem.data('mapAPIWrapper').Polyline(options.PolylineOptions);
+			if (data.polyline.line) data.polyline.line.doRemove();
+			data.polyline.line = elem.data('mapAPIWrapper').Polyline(options);
 
-			polyline.line.addListener('click',function() {
+			data.polyline.line.addListener('click',function() {
 				elem.data('saved_center',elem.data('map').copyCenter(elem.data('map_options').center));
 				elem.data('iw_opened',true);
-				polyline.infowindow.open(elem.data('map'));
-				polyline.infowindow.setPosition(options.position);
+				data.polyline.infowindow.open(elem.data('map'));
+				data.polyline.infowindow.setPosition(options.position);
 			});
 		}
 
 		elem.data(data);
-		return polyline;
 	}
 
 	function add_map_point(elem,point,position,title,makeContent,scale)
@@ -1313,7 +1699,7 @@ var Modul_maps = function () {
 
 	function add_traffic_control(elem) {
 		var mstyleCtrlContainer = elem.find('[class*=gm-style-mtc]').parent();
-		if (mstyleCtrlContainer && mstyleCtrlContainer.length && mstyleCtrlContainer.length > 0 && ! elem.data('buttons_done')) { // google maps
+		if (mstyleCtrlContainer && mstyleCtrlContainer.length && mstyleCtrlContainer.length > 0 && ! elem.data('trf_buttons_done')) { // google maps
 
 			var trfCntrl = document.createElement('div');
 			var style = $(mstyleCtrlContainer).find('[class*=gm-style-mtc]').attr('style');
@@ -1377,17 +1763,129 @@ var Modul_maps = function () {
 				}
 			});
 			mstyleCtrlContainer.append(trfCntrl);
-			elem.data('buttons_done',true);
+			elem.data('trf_buttons_done',true);
 			elem.data('mapAPIWrapper').event().clearListeners(elem.data('map'),'idle');
-		} else if (elem.data('map_type')=='OSM' && L && L.control && L.control.layers && !elem.data('buttons_done')) {
-			elem.data('map').getLayerControl().addOverlay(elem.data('traffic_layer'),'Traffic Flow');
-			elem.data('buttons_done',true);
-		} else if (!elem.data('buttons_done')) {
+		} else if (elem.data('map_type')=='OSM' && L && L.control && L.control.layers && !elem.data('trf_buttons_done')) {
+			elem.data('map').getLayerControl().addOverlay(elem.data('traffic_layer'),((elem.data('language')=='de')?'Verkehr':'Traffic'));
+			elem.data('trf_buttons_done',true);
+		} else if (!elem.data('trf_buttons_done')) {
 			setTimeout(function(){add_traffic_control(elem);},500);
 		}
 	}
 
+	function add_overlay_control(elem) {
+		var mstyleCtrlContainer = elem.find('[class*=gm-style-mtc]').parent();
+		if (mstyleCtrlContainer && mstyleCtrlContainer.length && mstyleCtrlContainer.length > 0 && ! elem.data('ovl_buttons_done')) { // google maps
+
+			var ovlCntrl = document.createElement('div');
+			var style = $(mstyleCtrlContainer).find('[class*=gm-style-mtc]').attr('style');
+			$(ovlCntrl).addClass('gm-style-mtc');
+			$(ovlCntrl).attr({'style':style});
+			$(ovlCntrl).css('left',style.replace(/.*width:/,'').replace(/\;.*/,''));
+
+			var ovlCntrlBtn = document.createElement('div');
+			style = $(mstyleCtrlContainer).find('[class*=gm-style-mtc]').children().first().attr('style');
+			$(ovlCntrlBtn).attr({'style':style});
+			switch (elem.data('language')) {
+				case 'de': default:
+					$(ovlCntrlBtn).text('Bild');
+					break;
+				case 'en':
+					$(ovlCntrlBtn).text('Overlay');
+					break;
+			}
+
+			$(ovlCntrl).append(ovlCntrlBtn);
+			$(ovlCntrl).css('visibility','');
+
+			if (elem.data('overlay')) $(ovlCntrlBtn).css('font-weight','500');
+
+			elem.data('mapAPIWrapper').event().addDomListener(ovlCntrlBtn, 'click', function() {
+				var elm = elem;
+				var OverlayLayer = elm.data('overlay_layer');
+				var map = elm.data('map');
+				if (typeof OverlayLayer.getMap() == 'undefined' || OverlayLayer.getMap() === null) { // switch on overlay layer
+					$(ovlCntrlBtn).css('font-weight','500');
+					OverlayLayer.setMap(map);
+				} else { // switch off overlay layer
+					OverlayLayer.setMap(null);
+					$(ovlCntrlBtn).removeClass('gmap-control-active');
+					$(ovlCntrlBtn).css('font-weight','');
+				}
+			});
+			mstyleCtrlContainer.append(ovlCntrl);
+			elem.data('ovl_buttons_done',true);
+			elem.data('mapAPIWrapper').event().clearListeners(elem.data('map'),'idle');
+		} else if (elem.data('map_type')=='OSM' && L && L.control && L.control.layers && !elem.data('ovl_buttons_done')) {
+			elem.data('map').getLayerControl().addOverlay(elem.data('overlay_layer'),((elem.data('language')=='de')?'Bild':'Overlay'));
+			elem.data('ovl_buttons_done',true);
+		} else if (!elem.data('ovl_buttons_done')) {
+			setTimeout(function(){add_overlay_control(elem);},500);
+		}
+	}
+
+	function add_heatmap_control(elem) {
+		var mstyleCtrlContainer = elem.find('[class*=gm-style-mtc]').parent();
+		if (mstyleCtrlContainer && mstyleCtrlContainer.length && mstyleCtrlContainer.length > 0 && ! elem.data('htm_buttons_done')) { // google maps
+
+			var htmCntrl = document.createElement('div');
+			var style = $(mstyleCtrlContainer).find('[class*=gm-style-mtc]').attr('style');
+			$(htmCntrl).addClass('gm-style-mtc');
+			$(htmCntrl).attr({'style':style});
+			$(htmCntrl).css('left',style.replace(/.*width:/,'').replace(/\;.*/,''));
+
+			var htmCntrlBtn = document.createElement('div');
+			style = $(mstyleCtrlContainer).find('[class*=gm-style-mtc]').children().first().attr('style');
+			$(htmCntrlBtn).attr({'style':style});
+			switch (elem.data('language')) {
+				case 'de': default:
+					$(htmCntrlBtn).text('Heatmap');
+					break;
+				case 'en':
+					$(htmCntrlBtn).text('Heatmap');
+					break;
+			}
+
+			$(htmCntrl).append(htmCntrlBtn);
+			$(htmCntrl).css('visibility','');
+
+			if (elem.data('heatmap')) $(htmCntrlBtn).css('font-weight','500');
+
+			elem.data('mapAPIWrapper').event().addDomListener(htmCntrlBtn, 'click', function() {
+				var elm = elem;
+				var HeatmapLayer = elm.data('heatmap_layer');
+				var map = elm.data('map');
+				if (typeof HeatmapLayer.getMap() == 'undefined' || HeatmapLayer.getMap() === null) { // switch on heatmap layer
+					$(htmCntrlBtn).css('font-weight','500');
+					HeatmapLayer.setMap(map);
+				} else { // switch off heatmap layer
+					HeatmapLayer.setMap(null);
+					$(htmCntrlBtn).removeClass('gmap-control-active');
+					$(htmCntrlBtn).css('font-weight','');
+				}
+			});
+			mstyleCtrlContainer.append(htmCntrl);
+			elem.data('htm_buttons_done',true);
+			elem.data('mapAPIWrapper').event().clearListeners(elem.data('map'),'idle');
+		} else if (elem.data('map_type')=='OSM' && L && L.control && L.control.layers && !elem.data('htm_buttons_done')) {
+		} else if (!elem.data('htm_buttons_done')) {
+			setTimeout(function(){add_heatmap_control(elem);},500);
+		}
+	}
+
 	function update_value(elem) {
+	}
+
+	function refresh_map_all(elem) {
+		var mapgroup = elem.data('mapgroup');
+		
+		me.elements.each(function (index) {
+			var data = $(this).data();
+			
+			if (mapgroup && data.mapgroup && mapgroup == data.mapgroup) {
+				me.update_map($(this),true);
+			}
+		});
 	}
 
 	function update_map(elem,withRoute) {
@@ -1397,6 +1895,8 @@ var Modul_maps = function () {
 			var data = elem.data();
 			if (data.stroke) options = get_options(elem,options,data,'polyline');
 			data.directionsDisplay.setOptions(options);
+
+			update_geojson(elem);
 
 			if (withRoute && data.direction_request && data.direction_request.origin && data.direction_request.destination) {
 				data.directionsService.calculateRoute(data.direction_request, function(result, status) {
@@ -1428,10 +1928,15 @@ var Modul_maps = function () {
 				data.point = add_map_point(elem,data.point,position,title,set_content);
 			}
 
-			if (data.polyline && data.polyline.length > 0) {
+			if (data.heatmapValues) {
+				var hmvals = data.heatmapValues.split(" ");
+				if (data.heatmap_layer) data.heatmap_layer.update(hmvals);
+			}
+
+			if (data.path && data.path.length > 0) {
 				var title = check_reading(elem,'alias')?check_reading(elem,'alias'):(check_reading(elem,'name')?check_reading(elem,'name'):'');
-				var position = data.polyline[parseInt(data.polyline.length/2)];
-				data.polyline = add_map_polyline(elem,data.polyline,position,title,set_content);
+				var position = data.path[parseInt(data.path.length/2)];
+				add_map_polyline(elem,data.path,position,title,set_content);
 			}
 
 			if (data.center != 'auto') {
@@ -1447,13 +1952,138 @@ var Modul_maps = function () {
 		}
 	}
 
+    function update_geojson(elem) {
+		var data = elem.data();
+
+		if (data.geojson || data.blitzer) {
+			data.map.data.setupDone = false;
+			var geojsoptions = {};
+
+			data.map.data.forEach(function(feature) {
+				data.map.data.remove(feature);
+			});
+
+			if (data.geojson) {
+				data.map.data.loadGeoJson(data.geojson);
+			}
+
+			geojsoptions = get_options(elem,geojsoptions,data,'feature'); // get default style for GeoJson features
+			data.map.data.setStyle(geojsoptions);
+
+			if (data.blitzer) {
+				getBlitzerJson(elem,geojsoptions);
+			}
+
+			data.map.data.addListener('addfeature',function(event) { // track adding of features (from GeoJson) and care for setting display options
+				var feature = elem.data('mapAPIWrapper').ConvertFeature(event,data);
+				var popup_content_click = '<div id="content" class="map_features map_infowindow">';
+				var popup_content_move = '<div id="content" class="map_features map_infowindow">';
+				var style = elem.data('mapAPIWrapper').GetFeatureStyle(feature,elem,geojsoptions,event);
+				
+				feature.forEachProperty(function(val,prop) {
+					if (data.feature_style && data.feature_style.popup_properties_click) {
+						var regexp = data.feature_style.popup_properties_click.split(' ');
+						$.each(regexp, function(index,value) {
+							var exp = new RegExp(value);
+							if (prop.search(exp)>-1 || value=='all') popup_content_click += '<b>'+prop+':</b> '+val+'<br>';
+						});
+					}
+
+					if (data.feature_style && data.feature_style.popup_properties_move) {
+						var regexp = data.feature_style.popup_properties_move.split(' ');
+						$.each(regexp, function(index,value) {
+							var exp = new RegExp(value);
+							if (prop.search(exp)>-1 || value=='all') popup_content_move += '<b>'+prop+':</b> '+val+'<br>';
+						});
+					}
+				});
+
+				popup_content_click += '</div>'
+				if (popup_content_click.search('<b>')>-1) { // we have at least one property to display in popup
+					feature.setProperty('popup_click',popup_content_click); // store description together with feature
+				}
+				popup_content_move += '</div>'
+				if (popup_content_move.search('<b>')>-1) { // we have at least one property to display in popup
+					feature.setProperty('popup_move',popup_content_move); // store description together with feature
+				}
+
+				if (style.icon && style.icon.hasOwnProperty("path") && style.icon.hasOwnProperty("url")) delete style.icon.path;
+				if (style) data.map.data.overrideStyle(feature,style);
+				elem.data(data);
+			});
+			
+			var myIWClick = (elem.data('map') && elem.data('map').data && elem.data('map').data.InfoWindowClick)?elem.data('map').data.InfoWindowClick:elem.data('mapAPIWrapper').InfoWindow();
+			elem.data('map').data.InfoWindowClick = myIWClick;
+			myIWClick.addListener('closeclick',function(){myIWClick.close();});
+			data.map.data.addListener('click',function(event) {
+				var feature = elem.data('mapAPIWrapper').ConvertFeature(event,data);
+				if (feature) {
+					var myPopupContent = feature.getProperty('popup_click');
+					var strokeWeight = feature.getProperty('strokeWeight');
+					if (myPopupContent) {
+						var geom = feature.getGeometry();
+						if (geom.getType() == 'Point') {
+							var pos = geom.get();
+							var offset = parseFloat(strokeWeight)/-2;
+						} else {
+							var bounds = elem.data('mapAPIWrapper').LatLngBounds();
+							geom.forEachLatLng(function(latlng) {bounds.extend(latlng)});
+							var pos = bounds.getCenter();
+							var offset = 0;
+						}
+						myIWClick.setPosition(pos);
+						myIWClick.setContent(myPopupContent);
+						myIWClick.setOptions({pixelOffset: elem.data('mapAPIWrapper').Size(0,offset)});
+						myIWClick.open(elem.data('map'));
+						if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+					}
+				}
+			});
+
+			var myIWPopup = (elem.data('map') && elem.data('map').data && elem.data('map').data.InfoWindowPopup)?elem.data('map').data.InfoWindowPopup:elem.data('mapAPIWrapper').InfoWindow();
+			elem.data('map').data.InfoWindowPopup = myIWPopup;
+			myIWPopup.addListener('closeclick',function(){myIWPopup.close();});
+			data.map.data.addListener('mouseover',function(event) {
+				var feature = elem.data('mapAPIWrapper').ConvertFeature(event,data);
+				if (feature) {
+					var myPopupContent = feature.getProperty('popup_move');
+					var strokeWeight = feature.getProperty('strokeWeight');
+					if (myPopupContent) {
+						var geom = feature.getGeometry();
+						if (geom.getType() == 'Point') {
+							var pos = geom.get();
+							var offset = parseFloat(strokeWeight)/-2;
+						} else {
+							var bounds = elem.data('mapAPIWrapper').LatLngBounds();
+							geom.forEachLatLng(function(latlng) {bounds.extend(latlng)});
+							var pos = bounds.getCenter();
+							var offset = 0;
+						}
+						myIWPopup.setPosition(pos);
+						myIWPopup.setContent(myPopupContent);
+						myIWPopup.setOptions({pixelOffset: elem.data('mapAPIWrapper').Size(0,offset)});
+						myIWPopup.open(elem.data('map'));
+					}
+				}
+			});
+			data.map.data.addListener('mouseout',function(event) {
+				myIWPopup.close(elem.data('map'));
+			});
+				
+			data.map.data.setupDone = true;
+		}
+	}
+
     function init_ui(elem) {
 
 		if (((me.google_api_initialized && elem.data("map_type")!="OSM") || ((me.osm_api_initialized && elem.data("map_type")=="OSM"))) && elem.is(':visible')) {
 			var map=undefined;
+			var newmap = true;
 			$(document).find("[id*='map-']").each(function(index){
 				if ($(this).parent().data('mapgroup') && elem.data('mapgroup') &&  $(this).parent().data('mapgroup') == elem.data('mapgroup')) {
 					if ($(this).parent().data('map')) map = $(this).parent().data('map');
+					elem.data('instance',$(this).parent().data('instance'));
+					newmap = false;
 				}
 			});
 
@@ -1481,120 +2111,29 @@ var Modul_maps = function () {
 			
 			elem.data('mapAPIWrapper',new wrMaps(elem.data('map_type'))); // generate API wrapper instance to allow access to different Map APIs
 
+			if (elem.data('instance') === undefined) {
+				elem.data('instance',$(document).find("[class^=maps_map]").length);
+			}
+
 			if (!map) { // check if map of same mapgroup is already existing, if not create new one
 				var maps_elem = $('<div class="maps_map" id="map-'+(elem.data('mapgroup')?elem.data('mapgroup').toString():'0')+'" style="height:100%;"></div>').data(elem.data()).appendTo(elem);
+				elem.data('map_options').maxZoom = elem.data('maxzoom');
+				elem.data('map_options').minZoom = elem.data('minzoom');
+				elem.data('map_options').maxNativeZoom = 18;
 				map = elem.data('mapAPIWrapper').Map(maps_elem.get(0),elem.data('map_options'));
 				map.elem = elem;
+				map.setMaxZoom(elem.data('maxzoom'));
+				map.setMinZoom(elem.data('minzoom'));
 				map.add_map_point = add_map_point;
 				map.set_content = set_content;
-				if (!elem.data('buttons_done')) elem.data('mapAPIWrapper').event().addDomListener(map, 'idle', function() {add_traffic_control(elem);});
+				if (!elem.data('trf_buttons_done')) elem.data('mapAPIWrapper').event().addDomListener(map, 'idle', function() {add_traffic_control(elem);});
 			}
 
 			elem.data('map', map);
 			var data = elem.data();
 
-			if (data.geojson) {
-				data.map.data.setupDone = false;
-				var geojsoptions = {};
-				data.map.data.loadGeoJson(data.geojson);
-				geojsoptions = get_options(elem,geojsoptions,data,'feature'); // get default style for GeoJson features
-				data.map.data.setStyle(geojsoptions);
-				data.map.data.addListener('addfeature',function(event) { // track adding of features (from GeoJson) and care for setting display options
-					var feature = elem.data('mapAPIWrapper').ConvertFeature(event,data);
-					var popup_content_click = '<div id="content" class="map_features map_infowindow">';
-					var popup_content_move = '<div id="content" class="map_features map_infowindow">';
-					var style = elem.data('mapAPIWrapper').GetFeatureStyle(feature,elem,geojsoptions,event);
-					
-					feature.forEachProperty(function(val,prop) {
-						if (data.feature_style && data.feature_style.popup_properties_click) {
-							var regexp = data.feature_style.popup_properties_click.split(' ');
-							$.each(regexp, function(index,value) {
-								var exp = new RegExp(value);
-								if (prop.search(exp)>-1 || value=='all') popup_content_click += '<b>'+prop+':</b> '+val+'<br>';
-							});
-						}
-
-						if (data.feature_style && data.feature_style.popup_properties_move) {
-							var regexp = data.feature_style.popup_properties_move.split(' ');
-							$.each(regexp, function(index,value) {
-								var exp = new RegExp(value);
-								if (prop.search(exp)>-1 || value=='all') popup_content_move += '<b>'+prop+':</b> '+val+'<br>';
-							});
-						}
-					});
-
-					popup_content_click += '</div>'
-					if (popup_content_click.search('<b>')>-1) { // we have at least one property to display in popup
-						feature.setProperty('popup_click',popup_content_click); // store description together with feature
-					}
-					popup_content_move += '</div>'
-					if (popup_content_move.search('<b>')>-1) { // we have at least one property to display in popup
-						feature.setProperty('popup_move',popup_content_move); // store description together with feature
-					}
-
-					if (style) data.map.data.overrideStyle(feature,style);
-					elem.data(data);
-				});
-				
-				var myIWClick = elem.data('mapAPIWrapper').InfoWindow();
-				myIWClick.addListener('closeclick',function(){myIWClick.close();});
-				data.map.data.addListener('click',function(event) {
-					var feature = elem.data('mapAPIWrapper').ConvertFeature(event,data);
-					if (feature) {
-						var myPopupContent = feature.getProperty('popup_click');
-						var strokeWeight = feature.getProperty('strokeWeight');
-						if (myPopupContent) {
-							var geom = feature.getGeometry();
-							if (geom.getType() == 'Point') {
-								var pos = geom.get();
-								var offset = parseFloat(strokeWeight)/-2;
-							} else {
-								var bounds = elem.data('mapAPIWrapper').LatLngBounds();
-								geom.forEachLatLng(function(latlng) {bounds.extend(latlng)});
-								var pos = bounds.getCenter();
-								var offset = 0;
-							}
-							myIWClick.setPosition(pos);
-							myIWClick.setContent(myPopupContent);
-							myIWClick.setOptions({pixelOffset: elem.data('mapAPIWrapper').Size(0,offset)});
-							myIWClick.open(elem.data('map'));
-							if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-						}
-					}
-				});
-				var myIWPopup = elem.data('mapAPIWrapper').InfoWindow();
-				myIWPopup.addListener('closeclick',function(){myIWPopup.close();});
-				data.map.data.addListener('mouseover',function(event) {
-					var feature = elem.data('mapAPIWrapper').ConvertFeature(event,data);
-					if (feature) {
-						var myPopupContent = feature.getProperty('popup_move');
-						var strokeWeight = feature.getProperty('strokeWeight');
-						if (myPopupContent) {
-							var geom = feature.getGeometry();
-							if (geom.getType() == 'Point') {
-								var pos = geom.get();
-								var offset = parseFloat(strokeWeight)/-2;
-							} else {
-								var bounds = elem.data('mapAPIWrapper').LatLngBounds();
-								geom.forEachLatLng(function(latlng) {bounds.extend(latlng)});
-								var pos = bounds.getCenter();
-								var offset = 0;
-							}
-							myIWPopup.setPosition(pos);
-							myIWPopup.setContent(myPopupContent);
-							myIWPopup.setOptions({pixelOffset: elem.data('mapAPIWrapper').Size(0,offset)});
-							myIWPopup.open(elem.data('map'));
-						}
-					}
-				});
-				data.map.data.addListener('mouseout',function(event) {
-					myIWPopup.close(elem.data('map'));
-				});
-					
-				data.map.data.setupDone = true;
-			}
-
-			map.addListener('bounds_changed', function() {
+			if (newmap) map.addListener('bounds_changed', function() {
+				elem.data('map_options').zoom = this.getZoom();
 				if (this.getCenter() == undefined) return; 
 				if ((typeof elem.data('map_options').center.lat == 'undefined') || (typeof elem.data('map_options').center.lng == 'unefined')) {
 					elem.data('map_options').center = {
@@ -1603,13 +2142,46 @@ var Modul_maps = function () {
 					}
 				}
 				var oldcenter = {};
-				oldcenter.lat = elem.data('map').getCenter().lat?elem.data('map').getCenter().lat:elem.data('map').getCenter().lat();
-				oldcenter.lng = elem.data('map').getCenter().lng?elem.data('map').getCenter().lng:elem.data('map').getCenter().lng();
+				oldcenter.lat = (typeof elem.data('map').getCenter().lat==='function')?elem.data('map').getCenter().lat():elem.data('map').getCenter().lat;
+				oldcenter.lng = (typeof elem.data('map').getCenter().lng==='function')?elem.data('map').getCenter().lng():elem.data('map').getCenter().lng;
 				var oldzoom = elem.data('map').getZoom();
 				if (!elem.data('iw_opened')) elem.data('saved_center',elem.data('map').copyCenter(elem.data('map_options').center)); // only save change if coming from an newly opened info window
 				elem.data('iw_opened',false); // now clear marker for newly opened infowindow (not done in center_changed as both events are fired)
 				if ((elem.data('center') != 'auto') && (elem.data('map_options').center.lat!=oldcenter.lat || elem.data('map_options').center.lng!=oldcenter.lng)) elem.data('map').setCenter(elem.data('map_options').center);
 				if ((elem.data('zoom') != 'auto') && (elem.data('map_options').zoom != oldzoom))elem.data('map').setZoom(elem.data('map_options').zoom);
+
+				// check if other maps are in the same scrollgroup and zoom them accordingly
+				var _data = elem.data();
+				//var lat = ((typeof _data.map.getCenter().lat==='function')?_data.map.getCenter().lat():_data.map.getCenter().lat);
+				//var lng = ((typeof _data.map.getCenter().lng==='function')?_data.map.getCenter().lng():_data.map.getCenter().lng);
+				//console.log("bounds_changed: ",_data.instance,_data.mapgroup,_data.map_options.zoom,lat,lng,_data.map.data.dontlisten);
+				if (!_data.api_initialized) return;
+				if (_data.map.data.dontlisten) {
+					_data.map.data.dontlisten = false;
+					return;
+				}
+				var theDoc = (_data.popup)?elem.parent():$(document);
+				theDoc.find("[class^=maps_map]").each(function() {
+					if ($(this).parent().is(':visible')) {
+						var data = $(this).parent().data();
+						if ((data.scrollgroup == _data.scrollgroup) && 
+							(_data.scrollgroup!==undefined) && 
+							(_data.instance!=data.instance) && 
+							(_data.mapgroup!=data.mapgroup) && 
+							data.api_initialized) {
+							if (_data.map.getZoom() != data.map.getZoom()) {
+								data.map.data.dontlisten = true;
+								data.map.setZoom(_data.map_options.zoom);
+							}
+							if (_data.map_options.center.lat != data.map_options.center.lat ||
+								_data.map_options.center.lng != data.map_options.center.lng) {
+									data.map.data.dontlisten = true;
+									data.map.setCenter(_data.map_options.center);
+								}
+						}
+						$(this).parent().data(data);
+					}
+				});
 			});
 			map.addListener('zoom_changed', function() {
 				elem.data('map_options').zoom = this.getZoom();
@@ -1617,10 +2189,59 @@ var Modul_maps = function () {
 			});
 			map.addListener('center_changed', function() {
 				if (this.getCenter() == undefined) return; 
-				elem.data('map_options').center.lat = this.getCenter().lat?this.getCenter().lat:this.getCenter().lat();
-				elem.data('map_options').center.lng = this.getCenter().lng?this.getCenter().lng:this.getCenter().lng();
+				elem.data('map_options').center.lat = (typeof this.getCenter().lat==='function')?this.getCenter().lat():this.getCenter().lat;
+				elem.data('map_options').center.lng = (typeof this.getCenter().lng==='function')?this.getCenter().lng():this.getCenter().lng;
 				if (!elem.data('iw_opened')) elem.data('saved_center',elem.data('map').copyCenter(elem.data('map_options').center)); // only save change if coming from an newly opened info window
+
 			});
+
+			var options = {};
+			if (data.overlay) {
+				var opars = data.overlay.split(",");
+				if (opars.length && opars.length >= 5) {
+					var url = (opars[0].indexOf('http')>-1)?opars[0]:document.location.origin + '/fhem/images/' + opars[0];
+					var bounds = {
+						north: parseFloat(opars[1]),
+						south: parseFloat(opars[3]),
+						east: parseFloat(opars[4]),
+						west: parseFloat(opars[2])
+					};
+					
+					options = {'map':map};
+					if (opars[5]) options.opacity = opars[5];
+					if (opars[6]) options.minzoom = opars[6];
+					if (opars[7]) options.maxzoom = opars[7];
+					data.overlay_layer = elem.data('mapAPIWrapper').GroundOverlay(url,bounds,options);
+					if (!elem.data('ovl_buttons_done')) elem.data('mapAPIWrapper').event().addDomListener(map, 'idle', function() {add_overlay_control(elem);});
+				} else {
+					ftui.toast('Could overlay picture layer, data-overlay is not correct, must be in the form <url>,<north>,<west>,<south>,<east>,<opacity>,<zoomMin>,<zoomMax>','error');
+				}
+			}
+
+			if (data.heatmap) {
+				options = {'map':map,"gradient":["rgba(0,0,255,0)","rgba(0,0,255,0.4)","rgba(0,255,255,0.6)","rgba(0,255,0,0.7)","rgba(255,255,0,0.8)","rgba(255,0,0,1.0)"],"radius":25,"minzoom":data.minzoom,"maxzoom":data.maxzoom};
+				if (data.heatmap_gradient) options.gradient = data.heatmap_gradient;
+				if (data.map_type == "OSM") {
+					if (($('head').find("script[src*='./lib/leaflet-heat.js']").length <= 0)) {
+						var script = document.createElement("script");
+						script.src = './lib/leaflet-heat.js';
+						script.crossOrigin = "";
+						document.getElementsByTagName("head")[0].appendChild(script);
+					}
+				}
+				var hpars = data.heatmap.split(",");
+				if (hpars.length && hpars.length >= 1) {
+					if (hpars[1] && hpars[1]!='') options.opacity = hpars[1];
+					if (hpars[2] && hpars[2]!='') options.minzoom = hpars[2];
+					if (hpars[3] && hpars[3]!='') options.maxzoom = hpars[3];
+					if (hpars[4] && hpars[4]!='') options.radius = hpars[4];
+					var hmvals = data.heatmapValues.split(" ");
+					elem.data('heatmap_layer',elem.data('mapAPIWrapper').Heatmap(hmvals,options));
+					if (!elem.data('htm_buttons_done')) elem.data('mapAPIWrapper').event().addDomListener(map, 'idle', function() {add_heatmap_control(elem);});
+				} else {
+					ftui.toast('Could overlay heatmap layer, data-heatmap is not correct, must be in the form <reading>,<opacity>,<zoomMin>,<zoomMax>,<radius>','error');
+				}
+			}
 
 			var directionsService = elem.data('mapAPIWrapper').DirectionsService();
 			var data = elem.data();
@@ -1634,9 +2255,18 @@ var Modul_maps = function () {
 				var trafficLayer = elem.data('mapAPIWrapper').TrafficLayer(elem.data('traffic_thickness'));
 				trafficLayer.setMap(map);
 				elem.data('traffic_layer',trafficLayer);
+			}
+
+			if (elem.data('traffic') || elem.data('overlay')) {
 				if (elem.data('mapAPIWrapper').event().special_trigger) elem.data('mapAPIWrapper').event().special_trigger(elem.data('map'),'idle'); // in case of 
 			}
 
+			var refbutton = $("<div class='fa fa-refresh' style='cursor: pointer; z-index: 100000; position: absolute; background-color: white; color: black; font-size: 20px; bottom: 30px; left: 10px'></div>");
+			elem.find("[id*='map-"+(data.mapgroup)+"']").append(refbutton);
+			refbutton.on('click',function(e){
+				var elem = $(e.delegateTarget).parent().parent();
+				refresh_map_all(elem);
+			});
 			elem.data('directionsService', directionsService);
 			elem.data('directionsDisplay', directionsDisplay);
 			elem.data('module_initialized',true);
@@ -1653,7 +2283,7 @@ var Modul_maps = function () {
 
     function update(dev, par) {
 		var doUpdate = false;
-		var doRoute = false
+		var doRoute = false;
 		var elems = [];
 
         me.elements.filterDeviceReading('start_address', dev, par)
@@ -1684,20 +2314,28 @@ var Modul_maps = function () {
 			})
 		});
 
+        me.elements.filterDeviceReading('heatmap_reading', dev, par)
+		.each(function (index) {
+			var elem = $(this);
+			elem.data('heatmapValues',check_reading(elem,'heatmap_reading'));
+			add_elems(elem,elems);
+			doUpdate = true;
+		});
+
         me.elements.filterDeviceReading('polygon', dev, par)
 		.each(function (index) {
 			var elem = $(this);
-			var polyline = [];
+			var path = [];
 			var value = check_reading(elem,'polygon');
 			if (value) {
 				value = value.replace(/ *, */,',');
 				$.each(value.split(/\s+/),function(index,key) {
 					var ppt = this.split(',');
-					if (ppt.length && ppt.length > 1) polyline.push({lng: parseFloat(ppt[0]), lat: parseFloat(ppt[1])});
+					if (ppt.length && ppt.length > 1) path.push({lng: parseFloat(ppt[0]), lat: parseFloat(ppt[1])});
 				});
 			}
 
-			elem.data('polyline',polyline);
+			elem.data('path',path);
 			add_elems(elem,elems);
 			doUpdate = true;
 		});
@@ -1742,6 +2380,7 @@ var Modul_maps = function () {
 			if ($.isArray(center) && center.length > 0) elem.data('map_options').center.lat = parseFloat(center[0]);
 			if ($.isArray(center) && center.length > 1) elem.data('map_options').center.lng = parseFloat(center[1]);
 			if (center) elem.data('center',center.join(','));
+			elem.data('saved_center',elem.data('map_options').center);
 			add_elems(elem,elems);
 			doUpdate = true;
 		});
@@ -1791,6 +2430,15 @@ var Modul_maps = function () {
 			doUpdate = true;
 		});
 
+        me.elements.filterDeviceReading('triggerRedraw', dev, par)
+		.each(function (index) {
+			var elem = $(this);
+			if (check_reading(elem,'triggerRedraw')) {
+				doUpdate=true;
+				add_elems(elem,elems);
+			}
+		});
+
         me.elements.filterDeviceReading('includeReturnxxx', dev, par)
 		.each(function (index) {
 			var elem = $(this);
@@ -1801,10 +2449,21 @@ var Modul_maps = function () {
 			doUpdate = true;
 		});
 
+        me.elements.filterDeviceReading('blitzer', dev, par)
+		.each(function (index) {
+			var elem = $(this);
+			var sOK = check_reading(elem,'blitzer') == 'ok';
+			if ($(this).data('module_initialized') && sOK) {
+				doUpdate = true;
+			}
+		});
+
+
 		if (doUpdate) {
 			$.each(elems,function(ind,val) {
 				if ($(this).data('module_initialized')) {
-					me.update_map($(this),doRoute);
+					//me.update_map($(this),doRoute);
+					refresh_map_all($(this));
 				}
 			});
 		}
