@@ -27,6 +27,9 @@ See:
 [Link to Forum Discussion](https://forum.fhem.de/index.php/topic,78379.msg703359.html#msg703359)
 for details of capabilities and usage.
 
+See:
+[Link to Map Widget Wiki](https://wiki.fhem.de/wiki/FTUI_Widget_Maps)
+for details about the using and features of the chart widget.
 <h2>Scrollabel Widget:</h2>
 
 Widget for scrolled text in vertical and horizontal direction
