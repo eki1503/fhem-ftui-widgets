@@ -17,7 +17,7 @@ See:
 [Link to Chart Widget Wiki](https://wiki.fhem.de/wiki/FTUI_Widget_Chart)
 for details about the using and features of the chart widget.
 
-<h2>(Google) Maps Widget:</h2>
+<h2>Maps Widget:</h2>
 
 Widget for showing maps and mapping of any kind of information from FHEM onto a map
 
