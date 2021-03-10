@@ -2,7 +2,7 @@
  * Copyright (c) 2015-2017 Kurt Eckert
  * Under MIT License (http://www.opensource.org/licenses/mit-license.php)
  */
-/* Version 2.10.0
+/* Version 2.11.0
 /* Compatible FTUI Version >= 2.7.2
 
 /* global ftui:true, Modul_widget:true, Powerange:true */
@@ -916,8 +916,13 @@ var widget_chart = {
 		var cp,cx,cy;
 		var first;
 		var disconnected;
+		var ptc = ptype.substring(0,Math.max(0,ptype.indexOf('_proxy')>0?ptype.indexOf('_proxy'):ptype.length)).split('-');
+		var subtype = (ptc.length && ptc.length > 1)?ptc[1]:'';
+		var start = subtype.search('start')>-1?true:false;
+		var end = subtype.search('end')>-1?true:false;
+		var type = ptc[0];
 		
-		switch (ptype.substring(0,Math.max(0,ptype.indexOf('_proxy')>0?ptype.indexOf('_proxy'):ptype.length))) {
+		switch (type) {
 			case 'lines':
 				first = true;
 				for (i=0,l=arg.length;i<l;i++) {
@@ -1019,10 +1024,10 @@ var widget_chart = {
 						if (disconnected) {
 						} else {
 							if (!(arg[i][5] && arg[i][5]==true)) {	// next point is not a disconnected point, normal behaviour
-								xval = (arg[i][0]-step);
+								xval = end?(arg[i][0]-2*step):(start?(arg[i][0]):(arg[i][0]-step));
 								res.push(xval + ',' + min);
 								res.push(xval + ',' + arg[i][1]);
-								xval = (arg[i][0]+step);
+								xval = end?(arg[i][0]):(start?(arg[i][0]+2*step):(arg[i][0]+step));
 								res.push(xval + ',' + arg[i][1]);
 								res.push(xval + ',' + min);
 							} else {
@@ -1039,15 +1044,15 @@ var widget_chart = {
 					res.push((arg[0][0]+arg[1][0])/2 + "," + (closed?min:arg[0][1]));
 					for (i=1,l=arg.length-1;i<l;i++) {
 						if(arg[i]) {
-							xval = (arg[i-1][0]+arg[i][0])/2;
+							xval = end?arg[i-1][0]:(start?arg[i][0]:(arg[i-1][0]+arg[i][0])/2);
 							res.push(xval + ',' + min);
 							res.push(xval + ',' + arg[i][1]);
-							xval = (arg[i][0]+arg[i+1][0])/2;
+							xval = end?arg[i][0]:(start?arg[i+1][0]:(arg[i][0]+arg[i+1][0])/2);
 							res.push(xval + ',' + arg[i][1]);
 							res.push(xval + ',' + min);
 						}
 					}
-					res.push((arg[arg.length-2][0]+arg[arg.length-1][0])/2 + "," + arg[arg.length-1][1]);
+					res.push((end?arg[arg.length-2][0]:(start?arg[arg.length-1][0]:(arg[arg.length-2][0]+arg[arg.length-1][0])/2)) + "," + arg[arg.length-1][1]);
 					res.push(arg[arg.length-1][0] + "," + arg[arg.length-1][1]);
 					res.push("L" + arg[arg.length-1][0] + "," + (closed?min + " Z":arg[arg.length-1][1]));
 				} else {
@@ -1832,9 +1837,10 @@ var widget_chart = {
 				var el = elem.find('[class*=yaxis_'+uaxis+'-'+ind+']'); // find object fitting to actual yaxis slot
 				if (el.length > 0) {
 					var axisPar = (uaxis!='secondary')?val.primary:val.secondary;
-					var xshift = (axisPar.yticks_prio)?0:((uaxis!='secondary')?-cyclicSum(data.textWidth_prim,index,ind-1):cyclicSum(data.textWidth_sec,index,ind-1));
+					var xshift = (axisPar.yticks_prio)?0:((uaxis!='secondary')?-(data.unusedYAxesVisible?cyclicSum(data.textWidth_prim,index,ind-1):0):(data.unusedYAxesVisible?cyclicSum(data.textWidth_sec,index,ind-1):0));
+					var opacity = data.unusedYAxesVisible?1:((uaxis!='secondary')?(ind==index?1:0):(ind==index?1:0));
 					var style = el.attr('style');
-					style = style.replace(/translateX\(.*\)/,'translateX('+xshift+'px)');
+					style = data.unusedYAxesVisible?style.replace(/translateX\(.*\)/,'translateX('+xshift+'px)'):style.replace(/opacity\:.*\;/,'opacity:'+opacity+';');
 					el.attr('style',style);
 				}
 			});
@@ -1950,13 +1956,34 @@ var widget_chart = {
 	showHideGridlines: function(event) { // helper function to prepare for toggle gridline display when axis string is clicked
 		var elem = $(event.delegateTarget);
 		var data = elem.closest("[class^=basesvg]").parent().data();
+		var isPrimary = (elem.attr('class').search('primary')>-1);
 		var AI = parseInt(elem.attr('class').replace(/.*-/,''));
 		$.each(data.yLimits, function(ind,val){
 			this.primary.yticks_prio = false;
 			this.secondary.yticks_prio = false;
 		});
 
-		if (elem.attr('class').search('primary')>-1) {
+		if (!data.unusedYAxesVisible) { // we need to find the next axis of the selected type and display this axis
+			var elaxes = elem.parent()
+			elaxes.find("[class*="+elem.attr('class').replace(/.*yaxis/,'yaxis').replace(/-.*/,'')+"]").each(function() {
+				if ($(this).css('opacity') == 1) AI = parseInt($(this).attr('class').replace(/.*-/,'')) // find currently visible axis
+			});
+			if (elaxes.find("[class*="+elem.attr('class').replace(/.*yaxis/,'yaxis').replace(/-.*/,'-'+parseInt(AI+1))+"]").length > 0) { // there is an axis with higher AI, take this one
+				AI++;
+			} else { // no axis with higher index, take lowest one
+				var xs = elaxes.find("[class*="+elem.attr('class').replace(/.*yaxis/,'yaxis').replace(/-.*/,'')+"]");
+				var AI = Infinity;
+				xs.each(function() {
+					var aindex = parseInt($(this).attr('class').replace(/.*-/,''));
+					if (aindex < AI) AI = aindex;
+				});
+				if (AI == Infinity) AI = 0;
+			}
+			
+			if (AI > data.yLimits.length-1) AI = 0;
+		}
+
+		if (isPrimary) {
 			data.yLimits[AI].primary.yticks_prio = true;
 		} else {
 			data.yLimits[AI].secondary.yticks_prio = true;			
@@ -3192,6 +3219,7 @@ var widget_chart = {
 		data.nGraphs = widget_chart.getnGraphs(data);
 		
 		var deferred = new $.Deferred();
+		$(theObj).data('runningRefresh',true);
 		for (var k=0; k<data.nGraphs; k++) {	// main loop for getting information from HTTP server (FEHM)
 			data.nofilldown[k] = false;
 
@@ -3541,7 +3569,7 @@ var widget_chart = {
 			return ret+DDD.Width(n);
 		};
 
-		data.getGraphLeft = function() {var ret = this.noticks?this.leftOffset:this.leftOffset+this.textWidth_prim.sum(); return ret;};
+		data.getGraphLeft = function() {var ret = this.noticks?this.leftOffset:this.leftOffset+(this.unusedYAxesVisible?this.textWidth_prim.sum():this.textWidth_prim.max()); return ret;};
 
 		data.transform = function (value,type,transfunc) { // do any kind of functional transformation of scaled y values in the original y data space
 			var valData = (this.isPrimary(type))?(value+this.shiftY)/this.scaleY:(value+this.shiftY_sec)/this.scaleY_sec;
@@ -4041,7 +4069,7 @@ var widget_chart = {
 			data.topOffset = nobuttons?(data.textHeight)/2+3*data.margin+fszT:(fszC>fszB)?fszC+fszT+3*data.margin:fszB+fszT+3*data.margin;
 
 			data.baseheight = parseFloat(svg_old.height());
-			data.graphWidth = (data.basewidth-(data.getGraphLeft()+data.textWidth_sec.sum()))/data.basewidth * 100.0;
+			data.graphWidth = (data.basewidth-(data.getGraphLeft()+(data.unusedYAxesVisible?data.textWidth_sec.sum():data.textWidth_sec.max())))/data.basewidth * 100.0;
 			data.graphHeight = (data.baseheight-((data.noticks)?0:data.bottomOffset)-data.topOffset)/data.baseheight * 100.0;
 
 			//Save pixel coordinates of graph area for later use
@@ -4302,7 +4330,7 @@ var widget_chart = {
 		clip.left = data.getGraphLeft();
 		var zBack = (data.DDD.Setting[0] && data.DDD.Setting[0]<0)?data.DDD.BackplaneZ(data.DDD,data.nGraphs):0;
 		var zFore = (data.DDD.Setting[0] && data.DDD.Setting[0]<0)?0:data.DDD.BackplaneZ(data.DDD,data.nGraphs);
-		clip.right = noticks?data.leftOffset+data.graphArea.width:data.leftOffset+data.textWidth_prim.sum()+data.graphArea.width/data.DDD.scaleX;
+		clip.right = noticks?data.leftOffset+data.graphArea.width:data.leftOffset+(data.unusedYAxesVisible?data.textWidth_prim.sum():data.textWidth_prim.max())+data.graphArea.width/data.DDD.scaleX;
 		var p1 = widget_chart.getTransformedPoint(data,theObj,{x:0,y:data.graphHeight/100*data.baseheight,z:zBack});
 		var p2 = widget_chart.getTransformedPoint(data,theObj,{x:data.graphWidth/100*data.basewidth,y:data.graphHeight/100*data.baseheight,z:zBack});
 		clip.bottom = (Math.max(p1.y,p2.y)-data.DDD.shiftY)/data.DDD.scaleY;
@@ -4583,7 +4611,10 @@ var widget_chart = {
 			}
 
 			var attrval2;
-			switch (ptype.substring(0,Math.max(0,ptype.indexOf('_proxy')>0?ptype.indexOf('_proxy'):ptype.length))) {
+			var ptc = ptype.substring(0,Math.max(0,ptype.indexOf('_proxy')>0?ptype.indexOf('_proxy'):ptype.length)).split('-');
+			var subtype = (ptc.length && ptc.length > 1)?ptc[1]:'';
+			var type = ptc[0];
+			switch (type) {
 				case 'lines':
 				case 'steps':
 				case 'fsteps':
@@ -4657,8 +4688,8 @@ var widget_chart = {
 						if (!gridlines_left) {gridlines_left = widget_chart.createElem('g').attr({'class':'gridlines','stroke':widget_chart.getStyleRuleValue(classesContainer, 'color', '')});}
 						if (!gridlines_bottom) {gridlines_bottom = widget_chart.createElem('g').attr({'class':'gridlines','stroke':widget_chart.getStyleRuleValue(classesContainer, 'color', '')});}
 						if (!buttons) {buttons = widget_chart.createElem('g').attr({'class':'buttons'});}
-						if (!tyaxis_prim[AI] && data.isPrimary(uaxis)) {tyaxis_prim[AI] = widget_chart.createElem('g').attr({'class':'text yaxis_primary'+'-'+AI,'style':stringTransition+data.DDD.String.Rot+' translateX(-'+data.textWidth_prim.sum(0,AI-1)+'px); '+data.DDD.String.Trans(0,0,data.DDD,data.xStrTO,data.yStrTO)});}
-						if (!tyaxis_sec[AI] && !data.isPrimary(uaxis)) {tyaxis_sec[AI] = widget_chart.createElem('g').attr({'class':'text yaxis_secondary'+'-'+AI,'style':stringTransition+data.DDD.String.Rot+' translateX('+data.textWidth_sec.sum(0,AI-1)+'px); '+data.DDD.String.Trans(data.DDD.Width(data.nGraphs-1),data.nGraphs,data.DDD,data.xStrTO,data.yStrTO)});}
+						if (!tyaxis_prim[AI] && data.isPrimary(uaxis)) {tyaxis_prim[AI] = widget_chart.createElem('g').attr({'class':'text yaxis_primary'+'-'+AI,'style':stringTransition+data.DDD.String.Rot+' translateX(-'+(data.unusedYAxesVisible?data.textWidth_prim.sum(0,AI-1):0)+'px); '+'opacity: '+(data.unusedYAxesVisible?'1':(AI==0?'1':'0'))+'; '+data.DDD.String.Trans(0,0,data.DDD,data.xStrTO,data.yStrTO)});}
+						if (!tyaxis_sec[AI] && !data.isPrimary(uaxis)) {tyaxis_sec[AI] = widget_chart.createElem('g').attr({'class':'text yaxis_secondary'+'-'+AI,'style':stringTransition+data.DDD.String.Rot+' translateX('+(data.unusedYAxesVisible?data.textWidth_sec.sum(0,AI-1):0)+'px); '+'opacity: '+(data.unusedYAxesVisible?'1':(AI==0?'1':'0'))+'; '+data.DDD.String.Trans(data.DDD.Width(data.nGraphs-1),data.nGraphs,data.DDD,data.xStrTO,data.yStrTO)});}
 						if (!txaxis) {txaxis = widget_chart.createElem('g').attr({'class':'text xaxis','style':data.DDD.String.Rot+'; '+data.DDD.String.Trans(0,0,data.DDD,data.xStrTO,data.yStrTO)});}
 						if (!cxaxis) {cxaxis = widget_chart.createElem('g').attr({'style':data.DDD.prefix.replace(/-moz-/g,'')+'clip-path: url(#clipingRectXAxis'+data.instance+');'});}
 						if (!cgridlines) {cgridlines = widget_chart.createElem('g').attr({'style':data.DDD.prefix.replace(/-moz-/g,'')+'clip-path: url(#clipingRect'+data.instance+');'});}
@@ -5156,8 +5187,12 @@ var widget_chart = {
 						aiDone[data.flatUaxis(uaxis)][AI] = true;
 						svg.parent().find("[class*=viewbox]").each(function(index) {$(this)[0].setAttribute('viewBox', [0, -max, data.xrange, max-min ].join(' '));}); // jshint ignore:line
 					}
+
 					var p, point_new, color;
-					switch (ptype.substring(0,Math.max(0,ptype.indexOf('_proxy')>0?ptype.indexOf('_proxy'):ptype.length))) {
+					var ptc = ptype.substring(0,Math.max(0,ptype.indexOf('_proxy')>0?ptype.indexOf('_proxy'):ptype.length)).split('-');
+					var subtype = (ptc.length && ptc.length > 1)?ptc[1]:'';
+					var type = ptc[0];
+					switch (type) {
 						// add graphs themselves
 						case 'lines':
 						case 'steps':
@@ -5438,7 +5473,7 @@ var widget_chart = {
 			container.find('line.yaxis').remove();
 			style = data.DDD.prefix.replace(/-moz-/g,'')+'clip-path: url(#clipingRect'+(data.DDD.prefix=='-moz-'?'Graphs-':'Graphs-')+cachetype+data.instance+'); overflow: visible;';
 			container.append(svg_new.find("svg.chart-primsec").attr('style',style));
-			svg_new.find('g.lentries').appendTo(container);
+			//svg_new.find('g.lentries').appendTo(container);
 			svg_new.find('g.lentries').remove();
 			cachetype == 'previous' ? 
 				svg_old.find('rect.chart-background').parent().parent().append(container) : 
@@ -5476,7 +5511,10 @@ var widget_chart = {
 			}
 
 			data_save.openDrawings -= 1;
-			if (data_save.openDrawings <= 0) data_save.drawing = false; // all outstanding drawings are done event handling for scale and shift can be reactivated
+			if (data_save.openDrawings <= 0) {
+				data_save.drawing = false; // all outstanding drawings are done event handling for scale and shift can be reactivated
+				data_save.runningRefresh = false;
+			}
 			$(theObj).data(data_save); // all data values that are modified outside of data_save need to be withdrawn
 			data_save = null;
 			
@@ -5586,6 +5624,7 @@ function init_attr(elem) { // initialize all attributes called from widget init 
 	elem.data('yticks',          elem.data('yticks')                                                             || 'auto');
 	elem.data('yticks_sec',      elem.data('yticks_sec')                                                         || 'auto');
 	elem.data('yticks_prio',     elem.data('yticks_prio')                                                        || 'auto');
+	elem.data('yticks_hide',     elem.data('yticks_hide')                                                        || false);
  	elem.data('yunit',           elem.data('yunit')                                                              || '' );
 	elem.data('yunit_sec',       elem.data('yunit_sec')                                                          || '' );
 	elem.data('ytext',           elem.data('ytext')                                                              || '' );
@@ -5619,6 +5658,8 @@ function init_attr(elem) { // initialize all attributes called from widget init 
 	elem.data('filltime_end',    elem.data('filltime_end')                                                       || false);
 
 	elem.data('filltime_end_save',elem.data('filltime_end'));
+
+	elem.data('unusedYAxesVisible',!elem.data('yticks_hide'));
 
 	var devName = ($.isArray(elem.data('logdevice')))?elem.data('logdevice')[0]:(elem.data('logdevice')!==undefined)?elem.data('logdevice'):elem.data('device');
 	elem.data('device',       elem.data('device')                                                         || devName);
@@ -5689,6 +5730,19 @@ function init_attr(elem) { // initialize all attributes called from widget init 
 			if (this[i]!==undefined) sum += this[i];
 		}
 		return sum;
+	};
+	}
+	if (!Array.max) {
+	Array.prototype.max = function(in_start,in_end) {
+		var start = in_start!==undefined?in_start:0;
+		var end = in_end!==undefined?in_end+1:this.length;
+		start = Math.min(start,end);
+		end = Math.max(start,end);
+		var max = -Infinity;
+		for (var i=start; i<end; i++) {
+			if (this[i]!==undefined && (this[i] > max)) max = this[i];
+		}
+		return max==-Infinity?0:max;
 	};
 	}
 	if (!Array.clone) {
@@ -5923,7 +5977,7 @@ function update (dev,par) {
 			} else {
 				widget_chart.pendingUpdateRequests[data.instance]--;
 				//widget_chart.doLog("widget_chart.update","Pending Update Requests for instance "+data.instance+": " + widget_chart.pendingUpdateRequests[data.instance]);
-				if (widget_chart.pendingUpdateRequests[data.instance] <= 0) {
+				if (widget_chart.pendingUpdateRequests[data.instance] <= 0 && !data.runningRefresh) { // wait until all pendinng function calls to waitForInitialization are done and no non finalized redraw is pending
 					widget_chart.refresh(base,type);
 					widget_chart.doLog("widget_chart.update","Pending Update done in "+data.instance);
 				}
